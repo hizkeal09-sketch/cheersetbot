@@ -153,6 +153,7 @@ class UserFilter(TimestampMixin, Base):
     max_age: Mapped[int] = mapped_column(sa.Integer, default=60, server_default="60")
     gender: Mapped[Gender | None] = mapped_column(enum_type(Gender))
     city: Mapped[str | None] = mapped_column(sa.String(64))
+    religion: Mapped[Religion | None] = mapped_column(enum_type(Religion))
     active_recently_only: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, server_default=sa.false(), nullable=False
     )

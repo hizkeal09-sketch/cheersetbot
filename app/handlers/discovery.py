@@ -19,6 +19,7 @@ from app.constants import (
     CITIES,
     GENDER_LABELS_SHORT,
     PREFERENCE_LABELS_SHORT,
+    RELIGION_LABELS_SHORT,
     Gender,
     Preference,
 )
@@ -398,10 +399,16 @@ async def _render_filters(
     premium = has_premium(user, settings)
     active_text = "On" if flt.active_recently_only else "Off"
     lock = "" if premium else " 🔒"
+    # Effective religion: explicit filter > Any.
+    if flt.religion is not None:
+        religion_text = RELIGION_LABELS_SHORT.get(flt.religion, str(flt.religion))
+    else:
+        religion_text = "Any"
     text = (
         "⚙️ <b>Discovery filters</b>\n\n"
         f"🎂 Age: <b>{age_text}</b>\n"
         f"⚧ Gender: <b>{gender_text}</b>\n"
+        f"🙏 Religion: <b>{religion_text}</b>\n"
         f"📍 City: <b>{city_text}</b>\n"
         f"🕒 Recently active only: <b>{active_text}</b>{lock}\n"
         f"\n👀 You prefer: <b>{PREFERENCE_LABELS_SHORT.get(user.interested_in, 'Everyone')}</b>"
@@ -440,6 +447,21 @@ async def cb_filter_gender(
     gender = None if raw == "any" else raw
     try:
         flt = await DiscoveryService.update_filter(session, user, gender=gender)
+    except (ValueError, CheersError) as exc:
+        await answer_callback(callback, str(exc), alert=True)
+        return
+    await answer_callback(callback)
+    await _render_filters(callback, flt, user, settings)
+
+
+@router.callback_query(F.data.startswith("f:religion:"))
+async def cb_filter_religion(
+    callback: CallbackQuery, user: User, session: AsyncSession, settings: Settings
+) -> None:
+    raw = (callback.data or "").split(":")[2]
+    religion = None if raw == "any" else raw
+    try:
+        flt = await DiscoveryService.update_filter(session, user, religion=religion)
     except (ValueError, CheersError) as exc:
         await answer_callback(callback, str(exc), alert=True)
         return

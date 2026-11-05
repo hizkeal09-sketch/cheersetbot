@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,6 +93,18 @@ class MatchService:
     @staticmethod
     async def count_total(session: AsyncSession) -> int:
         return int(await session.scalar(sa.select(sa.func.count()).select_from(Match)) or 0)
+
+    @staticmethod
+    async def count_today(session: AsyncSession) -> int:
+        today = date.today()
+        return int(
+            await session.scalar(
+                sa.select(sa.func.count()).select_from(Match).where(
+                    sa.func.date(Match.created_at) == today
+                )
+            )
+            or 0
+        )
 
     @staticmethod
     def partner(match: Match, user: User) -> User:

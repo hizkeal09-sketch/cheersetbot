@@ -13,6 +13,7 @@ from app.config import Settings
 from app.constants import (
     Gender,
     Preference,
+    Religion,
     ReportStatus,
     ViewAction,
 )
@@ -165,6 +166,8 @@ class DiscoveryService:
 
         if flt and flt.city:
             conditions.append(sa.func.lower(User.city) == flt.city.lower())
+        if flt and flt.religion is not None:
+            conditions.append(User.religion == flt.religion)
         if flt and flt.active_recently_only:
             conditions.append(User.last_active_at >= utcnow() - timedelta(days=7))
 
@@ -347,6 +350,9 @@ class DiscoveryService:
         if "city" in fields:
             city = fields["city"]
             flt.city = validate_city(city) if city else None
+        if "religion" in fields:
+            religion = fields["religion"]
+            flt.religion = Religion(religion) if religion else None
         if "active_recently_only" in fields:
             flt.active_recently_only = bool(fields["active_recently_only"])
         await session.commit()
@@ -360,6 +366,7 @@ class DiscoveryService:
             min_age=18,
             max_age=60,
             gender=None,
+            religion=None,
             city=None,
             active_recently_only=False,
         )

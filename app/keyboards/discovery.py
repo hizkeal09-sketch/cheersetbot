@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton as Btn
 from aiogram.types import InlineKeyboardMarkup
 
-from app.constants import AGE_PRESETS, CITIES, GENDER_LABELS_SHORT
+from app.constants import AGE_PRESETS, CITIES, GENDER_LABELS_SHORT, RELIGION_LABELS_SHORT
 from app.database.models import UserFilter
 
 
@@ -52,6 +52,13 @@ def filters_keyboard(flt: UserFilter) -> InlineKeyboardMarkup:
     compact.append(gender_row[:3])
     if len(gender_row) > 3:
         compact.append(gender_row[3:])
+
+    religion_row = [Btn(text="🌐 Any", callback_data="f:religion:any")]
+    for religion, label in RELIGION_LABELS_SHORT.items():
+        religion_row.append(Btn(text=label, callback_data=f"f:religion:{religion.value}"))
+    compact.append(religion_row[:3])
+    if len(religion_row) > 3:
+        compact.append(religion_row[3:])
 
     city_text = f"📍 City: {flt.city}" if flt.city else "📍 City: Any"
     active_text = "✅ Active recently" if flt.active_recently_only else "🕒 Active recently"
