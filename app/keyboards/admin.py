@@ -113,6 +113,7 @@ def admin_user_detail_keyboard(user: User) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [ban_button, premium_button],
+            [Btn(text="🗑 Delete user data", callback_data=f"adm:user_delete:{user.id}")],
             [Btn(text="🚩 View reports", callback_data="adm:reports:0")],
             [Btn(text="⬅️ Users", callback_data="adm:users:0")],
         ]

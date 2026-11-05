@@ -44,3 +44,4 @@ class DeleteAccount(StatesGroup):
 class AdminFlow(StatesGroup):
     search = State()
     broadcast = State()
+    delete_confirm = State()

@@ -18,7 +18,6 @@ from app.constants import (
     INTENTION_LABELS,
     INTERESTS,
     MAX_PHOTOS,
-    PREFERENCE_LABELS,
     Gender,
     Intention,
     Preference,
@@ -37,7 +36,6 @@ from app.keyboards.registration import (
     intention_keyboard,
     interests_keyboard,
     photos_keyboard,
-    preference_keyboard,
 )
 from app.services.errors import CheersError
 from app.services.users import RegistrationData, UserService
@@ -73,9 +71,6 @@ def _preview(data: dict) -> str:
         with contextlib.suppress(ValueError):
             age = str(calculate_age(date.fromisoformat(dob_raw)))
     gender = GENDER_LABELS.get(Gender(data["gender"]), "") if data.get("gender") else ""
-    preference = (
-        PREFERENCE_LABELS.get(Preference(data["preferred"]), "") if data.get("preferred") else ""
-    )
     city = html.escape(str(data.get("city", "")))
     intention = INTENTION_LABELS.get(Intention(data["intention"]), "") if data.get("intention") else ""
     bio = html.escape(str(data.get("bio") or "No bio yet"))
@@ -84,7 +79,7 @@ def _preview(data: dict) -> str:
         "✨ <b>Here's your profile preview</b>\n\n"
         f"<b>{name}, {age}</b>\n"
         f"📍 {city}, Ethiopia\n"
-        f"{gender} · looking for {preference}\n"
+        f"{gender}\n"
         f"💞 {intention}\n\n"
         f"<i>{bio}</i>\n\n"
         f"✨ {' · '.join(interests)}\n"
@@ -163,20 +158,6 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
         await answer_callback(callback, "Please choose one of the options.", alert=True)
         return
     await state.update_data(gender=gender.value)
-    await state.set_state(Registration.preference)
-    await answer_callback(callback)
-    await safe_edit(callback, "Who would you like to meet?", preference_keyboard())
-
-
-@router.callback_query(StateFilter(Registration.preference), F.data.startswith("reg:pref:"))
-async def cb_preference(callback: CallbackQuery, state: FSMContext) -> None:
-    raw = (callback.data or "").split(":")[-1]
-    try:
-        preference = Preference(raw)
-    except ValueError:
-        await answer_callback(callback, "Please choose one of the options.", alert=True)
-        return
-    await state.update_data(preferred=preference.value)
     await state.set_state(Registration.city)
     await answer_callback(callback)
     await safe_edit(
@@ -212,6 +193,12 @@ async def _ask_location(message: Message, state: FSMContext) -> None:
         "This helps us improve nearby suggestions. Other users only ever see your city.\n"
         "Tap the location button, or tap <b>Skip</b>.",
         reply_markup=location_keyboard(),
+    )
+    await message.answer(
+        "⬅️ Go back to city selection:",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Back to city", callback_data="reg:back:city")]]
+        ),
     )
 
 
@@ -421,7 +408,9 @@ async def cb_confirm(
             first_name=data["first_name"],
             birth_date=birth_date,
             gender=Gender(data["gender"]),
-            interested_in=Preference(data["preferred"]),
+            interested_in=(
+                Preference.WOMEN if Gender(data["gender"]) == Gender.MAN else Preference.MEN
+            ),
             city=data["city"],
             intention=Intention(data["intention"]),
             interests=list(data.get("interests", [])),
@@ -484,7 +473,6 @@ async def cb_reg_back(
     if target == "dob":
         await state.update_data(
             gender=None,
-            preferred=None,
             city=None,
             latitude=None,
             longitude=None,
@@ -506,7 +494,6 @@ async def cb_reg_back(
 
     elif target == "gender":
         await state.update_data(
-            preferred=None,
             city=None,
             latitude=None,
             longitude=None,
@@ -522,25 +509,17 @@ async def cb_reg_back(
             reply_markup=gender_keyboard(),
         )
 
-    elif target == "preference":
+    elif target == "city":
         await state.update_data(
             city=None,
             latitude=None,
             longitude=None,
-            bio=None,
-            interests=[],
-            intention=None,
-            photos=[],
         )
-        await state.set_state(Registration.preference)
-        gender_raw = data.get("gender")
-        gender_label = (
-            GENDER_LABELS.get(Gender(gender_raw), "") if gender_raw else ""
-        )
+        await state.set_state(Registration.city)
         await safe_edit(
             callback,
-            f"Who would you like to meet?\n\n<i>You selected: {gender_label}</i>",
-            reply_markup=preference_keyboard(),
+            "📍 Which city are you based in?\n\nPick one below, or choose <b>Other city</b> to type it.",
+            reply_markup=city_keyboard(),
         )
 
     elif target == "bio":
@@ -555,7 +534,6 @@ async def cb_reg_back(
             "📝 <b>Tell people a little about yourself</b>\n\n"
             "What makes you you? What are you looking for? (10–500 characters)\n\n"
             "Keep it friendly — no phone numbers, usernames or links.",
-            reply_markup=remove_reply_keyboard(),
         )
         await callback.message.answer(
             "Or skip this step for now.",

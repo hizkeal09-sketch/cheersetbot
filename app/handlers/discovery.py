@@ -14,7 +14,14 @@ from aiogram.types import InlineKeyboardButton as Btn
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.constants import AGE_PRESETS, CITIES, GENDER_LABELS_SHORT, PREFERENCE_LABELS_SHORT
+from app.constants import (
+    AGE_PRESETS,
+    CITIES,
+    GENDER_LABELS_SHORT,
+    PREFERENCE_LABELS_SHORT,
+    Gender,
+    Preference,
+)
 from app.database.models import Match, User, UserFilter
 from app.keyboards.discovery import (
     discovery_card_keyboard,
@@ -374,7 +381,19 @@ async def _render_filters(
     callback: CallbackQuery, flt: UserFilter, user: User, settings: Settings
 ) -> None:
     age_text = f"{flt.min_age}–{flt.max_age}" if not (flt.min_age == 18 and flt.max_age == 60) else "Any (18–60)"
-    gender_text = GENDER_LABELS_SHORT.get(flt.gender, "Any") if flt.gender else "Any"
+    # Effective gender: explicit filter > preference > auto opposite-sex > Any.
+    if flt.gender is not None:
+        gender_text = GENDER_LABELS_SHORT.get(flt.gender, str(flt.gender))
+    elif user.interested_in == Preference.MEN:
+        gender_text = GENDER_LABELS_SHORT[Gender.MAN]
+    elif user.interested_in == Preference.WOMEN:
+        gender_text = GENDER_LABELS_SHORT[Gender.WOMAN]
+    elif user.gender == Gender.MAN:
+        gender_text = GENDER_LABELS_SHORT[Gender.WOMAN] + " (opposite sex)"
+    elif user.gender == Gender.WOMAN:
+        gender_text = GENDER_LABELS_SHORT[Gender.MAN] + " (opposite sex)"
+    else:
+        gender_text = "Any"
     city_text = html.escape(flt.city) if flt.city else "Any city"
     premium = has_premium(user, settings)
     active_text = "On" if flt.active_recently_only else "Off"

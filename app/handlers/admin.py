@@ -381,6 +381,68 @@ async def cb_admin_user_unban(
     await _refresh_admin_user(callback, session, target.id)
 
 
+@router.callback_query(F.data.startswith("adm:user_delete:"))
+async def cb_admin_user_delete(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """Ask admin to confirm user deletion."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        target = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    text = (
+        f"⚠️ <b>Delete user #{target.id}</b>\n\n"
+        f"Name: <b>{html.escape(target.first_name)}</b>\n"
+        f"Telegram ID: <code>{target.telegram_id}</code>\n\n"
+        "This will permanently delete the profile, photos, likes, matches, "
+        "messages, blocks, reports, and all related data. This cannot be undone.\n\n"
+        "Type <b>DELETE</b> to confirm."
+    )
+    await state.set_state(AdminFlow.delete_confirm)
+    await state.update_data(delete_target_id=user_id)
+    await safe_edit(
+        callback,
+        text,
+        admin_back_keyboard(f"adm:user:{user_id}"),
+    )
+
+
+@router.message(StateFilter(AdminFlow.delete_confirm), F.text)
+async def msg_admin_delete_confirm(
+    message: Message, state: FSMContext, session: AsyncSession, bot: Bot
+) -> None:
+    """Confirm and execute user deletion."""
+    if (message.text or "").strip() != "DELETE":
+        await message.answer("Type <b>DELETE</b> to confirm, or /cancel to abort.")
+        return
+    data = await state.get_data()
+    user_id = data.get("delete_target_id")
+    await state.clear()
+    try:
+        target = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await message.answer(f"User not found: {exc}")
+        return
+    admin_id = message.from_user.id
+    await AdminService.log_action(
+        session, admin_id, "delete_user", target.id, f"name={target.first_name}"
+    )
+    await session.delete(target)
+    await session.commit()
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_message(
+            target.telegram_id,
+            "🗑 Your Cheers Dating account and all data have been deleted by an administrator.",
+        )
+    await message.answer(
+        f"🗑 User #{user_id} and all related data have been deleted.",
+        reply_markup=admin_back_keyboard("adm:users:0"),
+    )
+
+
 async def _refresh_admin_user(
     callback: CallbackQuery, session: AsyncSession, user_id: int
 ) -> None:
