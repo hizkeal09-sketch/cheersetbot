@@ -33,11 +33,9 @@ like, and every member can report, block, pause, or delete their account.
 
 **Onboarding and profiles**
 - Mandatory 18+ confirmation plus date-of-birth validation.
-- Name, date of birth, gender, dating preference, city, optional location,
-  bio, interests, relationship intention, and up to 3 photos.
+- Name, date of birth, gender, **religion (Orthodox / Muslim / Catholic / Protestant)**, dating preference, city, optional location, bio, interests, relationship intention, and up to 3 photos.
 - Preview and confirmation before a profile goes live.
-- Edit profile, manage photos, change preferences, pause/reactivate, or
-  permanently delete the account.
+- Edit profile, manage photos, change preferences, pause/reactivate, or permanently delete the account.
 
 **Discovery and matching**
 - Card-based discovery with Like / Pass.
@@ -45,7 +43,8 @@ like, and every member can report, block, pause, or delete their account.
 - No self-discovery, no repeats, and no profiles you already liked or passed.
 - Mutual likes create a match and notify both people.
 - Daily discovery limits (configurable free and premium limits).
-- "Who liked you" list; premium members can see everyone who liked them.
+- **"Who liked you" list; premium members can see everyone who liked them.**
+- Total matches across the platform are shown in your matches screen.
 
 **Private messaging**
 - Text and photo messages are relayed only between matched members.
@@ -71,7 +70,7 @@ like, and every member can report, block, pause, or delete their account.
 - Per-user sliding-window anti-spam throttling.
 - Centralised error handler that logs failures and keeps the bot responsive.
 - Dockerfile and Docker Compose stack with automatic migration on startup.
-- Pytest suite (52 tests) covering validators, users, discovery, safety, admin,
+- Pytest suite (67 tests) covering validators, users, discovery, safety, admin,
   and premium logic.
 
 ---
@@ -367,7 +366,8 @@ alembic downgrade -1
 
 The first migration creates: `users`, `user_photos`, `user_filters`, `likes`,
 `profile_views`, `matches`, `messages`, `blocks`, `reports`, `admin_actions`,
-and `daily_usage`.
+`daily_usage`, `fsm_states`, and `broadcast_jobs`. A later migration adds the
+`religion` column to `users`.
 
 To reset local data, stop the bot, delete `cheers.db`, and run
 `alembic upgrade head` again. Never delete a production database.
@@ -446,6 +446,94 @@ separately.
 4. Run `alembic upgrade head`.
 5. Run `python -m app.main` under systemd, Supervisor, or a process manager.
 6. Keep exactly one polling process per bot token.
+
+---
+
+## Vercel + Neon Deployment
+
+Cheers Dating can run entirely serverless on **Vercel Functions** with the
+database on **Neon PostgreSQL**. Because Vercel functions are stateless and
+ephemeral, the bot runs in **webhook mode** (Telegram pushes updates to the
+function) instead of long polling. FSM state lives in PostgreSQL via the
+`fsm_states` table.
+
+### 1. Provision the database
+
+Create a Neon project in your organization and note the **pooled** connection
+string. Convert it to asyncpg form:
+
+```
+postgresql+asyncpg://user:pass@host-pooler.region.aws.neon.tech/db?ssl=require
+```
+
+Drop `channel_binding` (asyncpg negotiates it) and use `ssl=require`. Run
+migrations locally against Neon before the first deploy:
+
+```powershell
+$env:DATABASE_URL="postgresql+asyncpg://..."
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+### 2. Prepare the repository
+
+Vercel detects Python from `pyproject.toml`. The required files are already in
+the repo:
+
+- `pyproject.toml` — declares dependencies and `[tool.vercel] entrypoint = "vercel_app:app"`
+- `vercel_app.py` — FastAPI entrypoint with `/api/telegram`, `/api/health`, `/api/setup`, `/api/cron/broadcast`
+- `vercel.json` — function configuration (max duration 60s)
+- `.python-version` — Python 3.12
+- `.vercelignore` — excludes `.venv`, tests, `.neon`, node_modules, etc.
+
+### 3. Connect and deploy
+
+```powershell
+npm install -g vercel
+vercel login
+vercel link          # connect your GitHub repo
+vercel --prod        # deploy to production
+```
+
+### 4. Set environment variables on Vercel
+
+```powershell
+vercel env add BOT_TOKEN           # your BotFather token
+vercel env add ADMIN_IDS           # comma-separated Telegram IDs
+vercel env add DATABASE_URL        # Neon pooled URL (asyncpg form)
+vercel env add ENVIRONMENT         # production
+vercel env add VERCEL              # true
+vercel env add SERVERLESS          # true
+vercel env add WEBHOOK_URL         # https://your-app.vercel.app
+vercel env add WEBHOOK_SECRET      # A-Za-z0-9_- only (Telegram secret token)
+vercel env add SETUP_TOKEN         # protects /api/setup
+vercel env add CRON_SECRET         # protects /api/cron/broadcast
+vercel env add AUTO_CREATE_TABLES  # false (migrations run separately)
+vercel env add PREMIUM_ENABLED     # false (launch mode)
+```
+
+`LOG_FILE` is intentionally unset on Vercel (read-only filesystem); logs go to stdout.
+
+### 5. Register the webhook
+
+```powershell
+vercel curl -X POST https://your-app.vercel.app/api/setup \
+  -H "Authorization: Bearer <SETUP_TOKEN>"
+```
+
+This calls Telegram `setWebhook` with your `WEBHOOK_SECRET`. After this, the bot
+receives updates at `https://your-app.vercel.app/api/telegram`.
+
+### 6. Admin broadcasts on serverless
+
+Broadcasts are stored as `broadcast_jobs` rows and resume across invocations.
+To continue paused broadcasts, call:
+
+```powershell
+vercel curl -X POST https://your-app.vercel.app/api/cron/broadcast \
+  -H "Authorization: Bearer <CRON_SECRET>"
+```
+
+You can wire this to a cron job (Vercel Cron or external) to run every few minutes.
 
 ---
 
