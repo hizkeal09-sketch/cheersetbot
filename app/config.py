@@ -6,7 +6,7 @@ import re
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.utils.urls import normalize_database_url
@@ -107,6 +107,13 @@ class Settings(BaseSettings):
     @property
     def webhook_endpoint(self) -> str:
         return f"{self.webhook_url}{self.webhook_path}"
+
+    @model_validator(mode="after")
+    def _force_stdout_logging_in_serverless(self) -> Settings:
+        """On Vercel the filesystem is read-only, so never write to a log file."""
+        if self.is_serverless and self.log_file:
+            self.log_file = None
+        return self
 
     def validate_webhook(self) -> None:
         """Validate the webhook configuration used by the Vercel entrypoint."""
