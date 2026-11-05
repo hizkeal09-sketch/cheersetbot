@@ -29,3 +29,6 @@ Thumbs.db
 .vscode/
 .neon
 node_modules/
+
+.vercel
+.env*
