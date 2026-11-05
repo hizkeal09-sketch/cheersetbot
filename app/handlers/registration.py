@@ -24,7 +24,6 @@ from app.constants import (
 )
 from app.database.models import User
 from app.keyboards.common import (
-    location_keyboard,
     main_menu,
     onboarding_keyboard,
     remove_reply_keyboard,
@@ -183,23 +182,7 @@ async def cb_city(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(city=city)
     await answer_callback(callback)
     await safe_edit(callback, f"📍 City: <b>{html.escape(city)}</b>")
-    await _ask_location(callback.message, state)
-
-
-async def _ask_location(message: Message, state: FSMContext) -> None:
-    await state.set_state(Registration.location)
-    await message.answer(
-        "📍 <b>Optional: share your approximate location</b>\n\n"
-        "This helps us improve nearby suggestions. Other users only ever see your city.\n"
-        "Tap the location button, or tap <b>Skip</b>.",
-        reply_markup=location_keyboard(),
-    )
-    await message.answer(
-        "⬅️ Go back to city selection:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Back to city", callback_data="reg:back:city")]]
-        ),
-    )
+    await _after_location(callback.message, state)
 
 
 @router.message(StateFilter(Registration.custom_city), F.text)
@@ -210,28 +193,7 @@ async def msg_custom_city(message: Message, state: FSMContext) -> None:
         await message.answer(f"⚠️ {exc}")
         return
     await state.update_data(city=city)
-    await _ask_location(message, state)
-
-
-@router.message(StateFilter(Registration.location), F.location)
-async def msg_location(message: Message, state: FSMContext) -> None:
-    if message.location:
-        await state.update_data(
-            latitude=message.location.latitude, longitude=message.location.longitude
-        )
     await _after_location(message, state)
-
-
-@router.message(StateFilter(Registration.location), F.text)
-async def msg_location_skip(message: Message, state: FSMContext) -> None:
-    text = (message.text or "").strip().lower()
-    if text in {"skip", "⏭ skip", "no", "later"}:
-        await _after_location(message, state)
-        return
-    await message.answer(
-        "Please share your location with the button, or tap <b>Skip</b>.",
-        reply_markup=location_keyboard(),
-    )
 
 
 async def _after_location(message: Message, state: FSMContext) -> None:
