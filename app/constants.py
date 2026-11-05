@@ -13,7 +13,6 @@ class Gender(StrEnum):
 class Preference(StrEnum):
     MEN = "men"
     WOMEN = "women"
-    EVERYONE = "everyone"
 
 
 class Intention(StrEnum):
@@ -73,13 +72,11 @@ GENDER_LABELS_SHORT: dict[Gender, str] = {
 PREFERENCE_LABELS: dict[Preference, str] = {
     Preference.MEN: "👨 Men",
     Preference.WOMEN: "👩 Women",
-    Preference.EVERYONE: "🌈 Everyone",
 }
 
 PREFERENCE_LABELS_SHORT: dict[Preference, str] = {
     Preference.MEN: "Men",
     Preference.WOMEN: "Women",
-    Preference.EVERYONE: "Everyone",
 }
 
 INTENTION_LABELS: dict[Intention, str] = {

@@ -75,7 +75,7 @@ async def make_user(
         first_name=first_name,
         birth_date=kwargs.pop("birth_date", date(1995, 5, 20)),
         gender=kwargs.pop("gender", Gender.MAN),
-        interested_in=kwargs.pop("interested_in", Preference.EVERYONE),
+        interested_in=kwargs.pop("interested_in", Preference.WOMEN),
         city=kwargs.pop("city", "Addis Ababa"),
         bio=kwargs.pop("bio", "A friendly test profile."),
         interests=kwargs.pop("interests", ["music"]),

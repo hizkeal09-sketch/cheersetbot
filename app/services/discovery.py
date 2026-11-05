@@ -140,7 +140,7 @@ class DiscoveryService:
         ]
 
         # Target gender: explicit filter > registration preference > auto opposite-sex.
-        # When no preference is set (EVERYONE + no filter), match the opposite sex
+        # When no preference is set (no filter), match the opposite sex
         # so men see women and women see men by default.
         target_gender: Gender | None = None
         if flt and flt.gender is not None:
@@ -159,18 +159,9 @@ class DiscoveryService:
 
         # Reciprocal preference: the candidate must also be open to the viewer.
         if viewer.gender == Gender.MAN:
-            conditions.append(
-                sa.or_(User.interested_in == Preference.MEN, User.interested_in == Preference.EVERYONE)
-            )
+            conditions.append(User.interested_in == Preference.MEN)
         elif viewer.gender == Gender.WOMAN:
-            conditions.append(
-                sa.or_(
-                    User.interested_in == Preference.WOMEN,
-                    User.interested_in == Preference.EVERYONE,
-                )
-            )
-        else:
-            conditions.append(User.interested_in == Preference.EVERYONE)
+            conditions.append(User.interested_in == Preference.WOMEN)
 
         if flt and flt.city:
             conditions.append(sa.func.lower(User.city) == flt.city.lower())
