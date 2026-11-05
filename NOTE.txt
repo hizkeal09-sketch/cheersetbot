@@ -1,0 +1,15 @@
+...?
+Working on it — status so far:
+
+Done in this pass:
+
+app/utils/urls.py — normalizes Neon URLs (postgresql://…?sslmode=require&channel_binding=require → postgresql+asyncpg://…?ssl=require)
+app/config.py — added WEBHOOK_URL, WEBHOOK_SECRET, SETUP_TOKEN, CRON_SECRET, SERVERLESS, BROADCAST_INLINE_SECONDS + validation
+app/database/models.py — added FsmState (persistent FSM) and BroadcastJob (resumable broadcast queue)
+app/database/fsm_storage.py — DB-backed aiogram BaseStorage
+app/database/session.py — serverless mode: NullPool + disabled prepared-statement cache (PgBouncer/Neon pooled)
+app/bot.py — dispatcher now accepts injectable storage and refuses memory FSM in serverless mode
+app/commands.py — shared command menu
+Next: broadcast service, vercel_app.py, migration, tests, Neon migration, GitHub push, Vercel deploy.
+
+NOW , vercel_app.py, migration, tests, Neon migration, GitHub push, Vercel deploy.

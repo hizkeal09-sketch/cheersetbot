@@ -1,0 +1,36 @@
+name: cheers-dating
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cheers
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: cheers
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cheers -d cheers"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Compose overrides the SQLite URL from .env with the container database.
+      DATABASE_URL: postgresql+asyncpg://cheers:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/cheers
+      ENVIRONMENT: production
+      AUTO_CREATE_TABLES: "false"
+      # Container logs belong on stdout; collect them with your platform.
+      LOG_FILE: ""
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
