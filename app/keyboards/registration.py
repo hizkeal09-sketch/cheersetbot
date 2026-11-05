@@ -5,7 +5,14 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton as Btn
 from aiogram.types import InlineKeyboardMarkup
 
-from app.constants import CITIES, GENDER_LABELS, INTENTION_LABELS, INTERESTS, PREFERENCE_LABELS
+from app.constants import (
+    CITIES,
+    GENDER_LABELS,
+    INTENTION_LABELS,
+    INTERESTS,
+    PREFERENCE_LABELS,
+    RELIGION_LABELS,
+)
 
 
 def _chunks(items: list[tuple[str, str]], per_row: int = 2) -> list[list[Btn]]:
@@ -20,6 +27,15 @@ def gender_keyboard() -> InlineKeyboardMarkup:
         [(label, f"reg:gender:{gender.value}") for gender, label in GENDER_LABELS.items()]
     )
     rows.append([Btn(text="⬅️ Back", callback_data="reg:back:dob")])
+    rows.append([Btn(text="✖️ Cancel", callback_data="reg:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def religion_keyboard() -> InlineKeyboardMarkup:
+    rows = _chunks(
+        [(label, f"reg:religion:{religion.value}") for religion, label in RELIGION_LABELS.items()]
+    )
+    rows.append([Btn(text="⬅️ Back", callback_data="reg:back:gender")])
     rows.append([Btn(text="✖️ Cancel", callback_data="reg:cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

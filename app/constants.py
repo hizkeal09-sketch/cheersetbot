@@ -15,6 +15,13 @@ class Preference(StrEnum):
     WOMEN = "women"
 
 
+class Religion(StrEnum):
+    ORTHODOX = "orthodox"
+    MUSLIM = "muslim"
+    CATHOLIC = "catholic"
+    PROTESTANT = "protestant"
+
+
 class Intention(StrEnum):
     SERIOUS = "serious"
     LONG_TERM = "long_term"
@@ -77,6 +84,21 @@ PREFERENCE_LABELS: dict[Preference, str] = {
 PREFERENCE_LABELS_SHORT: dict[Preference, str] = {
     Preference.MEN: "Men",
     Preference.WOMEN: "Women",
+}
+
+
+RELIGION_LABELS: dict[Religion, str] = {
+    Religion.ORTHODOX: "🇪🇹 Orthodox",
+    Religion.MUSLIM: "🕌 Muslim",
+    Religion.CATHOLIC: "⛪ Catholic",
+    Religion.PROTESTANT: "✝️ Protestant",
+}
+
+RELIGION_LABELS_SHORT: dict[Religion, str] = {
+    Religion.ORTHODOX: "Orthodox",
+    Religion.MUSLIM: "Muslim",
+    Religion.CATHOLIC: "Catholic",
+    Religion.PROTESTANT: "Protestant",
 }
 
 INTENTION_LABELS: dict[Intention, str] = {

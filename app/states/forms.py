@@ -7,7 +7,7 @@ class Registration(StatesGroup):
     first_name = State()
     dob = State()
     gender = State()
-    preference = State()
+    religion = State()
     city = State()
     custom_city = State()
     location = State()

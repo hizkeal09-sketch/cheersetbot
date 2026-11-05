@@ -76,10 +76,12 @@ async def _send_matches(
 ) -> None:
     UserService.ensure_registered(user)
     matches = await MatchService.list_active(session, user.id)
+    total_matches = await MatchService.count_total(session)
     if not matches:
         await bot.send_message(
             chat_id,
-            "💬 <b>No matches yet</b>\n\n"
+            f"💬 <b>No matches yet</b>\n\n"
+            f"Total matches on Cheers: <b>{total_matches}</b>\n\n"
             "Discovery is where the magic starts. Like people who catch your eye — "
             "when they like you back, you'll match here.",
             reply_markup=InlineKeyboardMarkup(
@@ -99,7 +101,8 @@ async def _send_matches(
     has_next = len(matches) > start + PAGE_SIZE
     await bot.send_message(
         chat_id,
-        f"💬 <b>Your matches</b>\n\n{len(matches)} mutual match(es). "
+        f"💬 <b>Your matches</b>\n\n{len(matches)} mutual match(es) · "
+        f"{total_matches} total matches on Cheers. "
         "Tap a person to view their profile, or chat right away.",
         reply_markup=matches_keyboard(page_items, user, page, has_next),
     )

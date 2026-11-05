@@ -10,7 +10,7 @@ from aiogram.types import User as TelegramUser
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import Gender, Intention, Preference
+from app.constants import Gender, Intention, Preference, Religion
 from app.database.models import Block, User, UserFilter, UserPhoto
 from app.services.errors import InvalidTargetError, NotRegisteredError
 from app.utils.time import as_utc, calculate_age, utcnow
@@ -29,6 +29,7 @@ class RegistrationData:
     first_name: str
     birth_date: date
     gender: Gender
+    religion: Religion | None
     interested_in: Preference
     city: str
     intention: Intention
@@ -102,6 +103,7 @@ class UserService:
         user.first_name = first_name
         user.birth_date = data.birth_date
         user.gender = data.gender
+        user.religion = data.religion
         user.interested_in = data.interested_in
         user.city = city
         user.latitude = data.latitude
@@ -139,6 +141,8 @@ class UserService:
             user.gender = Gender(fields["gender"])
         if "interested_in" in fields and fields["interested_in"] is not None:
             user.interested_in = Preference(fields["interested_in"])
+        if "religion" in fields and fields["religion"] is not None:
+            user.religion = Religion(fields["religion"])
         if "city" in fields:
             user.city = validate_city(fields["city"])
         if "bio" in fields:

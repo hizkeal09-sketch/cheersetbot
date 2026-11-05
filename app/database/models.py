@@ -18,6 +18,7 @@ from app.constants import (
     Intention,
     MessageKind,
     Preference,
+    Religion,
     ReportReason,
     ReportStatus,
     ViewAction,
@@ -60,6 +61,7 @@ class User(TimestampMixin, Base):
     birth_date: Mapped[date | None] = mapped_column(sa.Date, index=True)
     gender: Mapped[Gender | None] = mapped_column(enum_type(Gender))
     interested_in: Mapped[Preference | None] = mapped_column(enum_type(Preference))
+    religion: Mapped[Religion | None] = mapped_column(enum_type(Religion))
     city: Mapped[str | None] = mapped_column(sa.String(64), index=True)
     latitude: Mapped[float | None] = mapped_column(sa.Float)
     longitude: Mapped[float | None] = mapped_column(sa.Float)

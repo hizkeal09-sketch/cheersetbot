@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from app.constants import Gender, Intention, Preference
+from app.constants import Gender, Intention, Preference, Religion
 from app.database.models import Block, Match, User, UserFilter, UserPhoto
 from app.services.users import RegistrationData, UserService
 from app.utils.validators import ValidationError
@@ -18,6 +18,7 @@ def registration_data(**overrides) -> RegistrationData:
         first_name="Selam",
         birth_date=date(1997, 3, 12),
         gender=Gender.WOMAN,
+        religion=Religion.ORTHODOX,
         interested_in=Preference.MEN,
         city="Addis Ababa",
         intention=Intention.SERIOUS,

@@ -18,9 +18,11 @@ from app.constants import (
     INTENTION_LABELS,
     INTERESTS,
     MAX_PHOTOS,
+    RELIGION_LABELS,
     Gender,
     Intention,
     Preference,
+    Religion,
 )
 from app.database.models import User
 from app.keyboards.common import (
@@ -35,6 +37,7 @@ from app.keyboards.registration import (
     intention_keyboard,
     interests_keyboard,
     photos_keyboard,
+    religion_keyboard,
 )
 from app.services.errors import CheersError
 from app.services.users import RegistrationData, UserService
@@ -70,6 +73,7 @@ def _preview(data: dict) -> str:
         with contextlib.suppress(ValueError):
             age = str(calculate_age(date.fromisoformat(dob_raw)))
     gender = GENDER_LABELS.get(Gender(data["gender"]), "") if data.get("gender") else ""
+    religion = RELIGION_LABELS.get(Religion(data["religion"]), "") if data.get("religion") else ""
     city = html.escape(str(data.get("city", "")))
     intention = INTENTION_LABELS.get(Intention(data["intention"]), "") if data.get("intention") else ""
     bio = html.escape(str(data.get("bio") or "No bio yet"))
@@ -78,7 +82,7 @@ def _preview(data: dict) -> str:
         "✨ <b>Here's your profile preview</b>\n\n"
         f"<b>{name}, {age}</b>\n"
         f"📍 {city}, Ethiopia\n"
-        f"{gender}\n"
+        f"{gender} · {religion}\n"
         f"💞 {intention}\n\n"
         f"<i>{bio}</i>\n\n"
         f"✨ {' · '.join(interests)}\n"
@@ -157,6 +161,24 @@ async def cb_gender(callback: CallbackQuery, state: FSMContext) -> None:
         await answer_callback(callback, "Please choose one of the options.", alert=True)
         return
     await state.update_data(gender=gender.value)
+    await state.set_state(Registration.religion)
+    await answer_callback(callback)
+    await safe_edit(
+        callback,
+        "What is your religion?",
+        religion_keyboard(),
+    )
+
+
+@router.callback_query(StateFilter(Registration.religion), F.data.startswith("reg:religion:"))
+async def cb_religion(callback: CallbackQuery, state: FSMContext) -> None:
+    raw = (callback.data or "").split(":")[-1]
+    try:
+        religion = Religion(raw)
+    except ValueError:
+        await answer_callback(callback, "Please choose one of the options.", alert=True)
+        return
+    await state.update_data(religion=religion.value)
     await state.set_state(Registration.city)
     await answer_callback(callback)
     await safe_edit(
@@ -370,6 +392,7 @@ async def cb_confirm(
             first_name=data["first_name"],
             birth_date=birth_date,
             gender=Gender(data["gender"]),
+            religion=Religion(data["religion"]) if data.get("religion") else None,
             interested_in=(
                 Preference.WOMEN if Gender(data["gender"]) == Gender.MAN else Preference.MEN
             ),
@@ -435,6 +458,7 @@ async def cb_reg_back(
     if target == "dob":
         await state.update_data(
             gender=None,
+            religion=None,
             city=None,
             latitude=None,
             longitude=None,
@@ -456,6 +480,7 @@ async def cb_reg_back(
 
     elif target == "gender":
         await state.update_data(
+            religion=None,
             city=None,
             latitude=None,
             longitude=None,
@@ -469,6 +494,19 @@ async def cb_reg_back(
             callback,
             "How do you identify?",
             reply_markup=gender_keyboard(),
+        )
+
+    elif target == "religion":
+        await state.update_data(
+            city=None,
+            latitude=None,
+            longitude=None,
+        )
+        await state.set_state(Registration.religion)
+        await safe_edit(
+            callback,
+            "What is your religion?",
+            reply_markup=religion_keyboard(),
         )
 
     elif target == "city":
