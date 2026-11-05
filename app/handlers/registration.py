@@ -471,3 +471,132 @@ async def cb_cancel(callback: CallbackQuery, state: FSMContext) -> None:
             ]
         ),
     )
+
+
+@router.callback_query(F.data.startswith("reg:back:"))
+async def cb_reg_back(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    """Go back one step in registration so the user can fix a mistake."""
+    target = callback.data.split(":", 2)[-1]
+    data = await state.get_data()
+
+    if target == "dob":
+        await state.update_data(
+            gender=None,
+            preferred=None,
+            city=None,
+            latitude=None,
+            longitude=None,
+            bio=None,
+            interests=[],
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.dob)
+        name = data.get("first_name", "You")
+        await safe_edit(
+            callback,
+            f"Nice to meet you, <b>{html.escape(name)}</b>! 🍻\n\n"
+            "🎂 What's your date of birth?\n"
+            "Send it as <code>DD/MM/YYYY</code> (for example <code>14/02/1996</code>).\n\n"
+            "<i>You must be 18 or older. Your exact birth date is never shown to others — "
+            "only your age.</i>",
+        )
+
+    elif target == "gender":
+        await state.update_data(
+            preferred=None,
+            city=None,
+            latitude=None,
+            longitude=None,
+            bio=None,
+            interests=[],
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.gender)
+        await safe_edit(
+            callback,
+            "How do you identify?",
+            reply_markup=gender_keyboard(),
+        )
+
+    elif target == "preference":
+        await state.update_data(
+            city=None,
+            latitude=None,
+            longitude=None,
+            bio=None,
+            interests=[],
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.preference)
+        gender_raw = data.get("gender")
+        gender_label = (
+            GENDER_LABELS.get(Gender(gender_raw), "") if gender_raw else ""
+        )
+        await safe_edit(
+            callback,
+            f"Who would you like to meet?\n\n<i>You selected: {gender_label}</i>",
+            reply_markup=preference_keyboard(),
+        )
+
+    elif target == "bio":
+        await state.update_data(
+            interests=[],
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.bio)
+        await safe_edit(
+            callback,
+            "📝 <b>Tell people a little about yourself</b>\n\n"
+            "What makes you you? What are you looking for? (10–500 characters)\n\n"
+            "Keep it friendly — no phone numbers, usernames or links.",
+            reply_markup=remove_reply_keyboard(),
+        )
+        await callback.message.answer(
+            "Or skip this step for now.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="⏭ Skip bio", callback_data="reg:skip_bio")]
+                ]
+            ),
+        )
+
+    elif target == "interests":
+        await state.update_data(
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.interests)
+        selected = list(data.get("interests", []))
+        await safe_edit(
+            callback,
+            f"✨ <b>What are you into?</b>\nSelected: {len(selected)}/8",
+            reply_markup=interests_keyboard(selected),
+        )
+
+    elif target == "intention":
+        await state.update_data(photos=[])
+        await state.set_state(Registration.intention)
+        await safe_edit(
+            callback,
+            "💞 <b>What are you looking for?</b>",
+            reply_markup=intention_keyboard(),
+        )
+
+    elif target == "photos":
+        await state.update_data(photos=[])
+        await state.set_state(Registration.photos)
+        await safe_edit(
+            callback,
+            "📸 <b>Add your photos</b>\n\n"
+            f"Send up to {MAX_PHOTOS} photos, one at a time. Your first photo is your main photo.\n"
+            "Clear face photos work best. No nudity or other people's photos, please.",
+            reply_markup=photos_keyboard(False),
+        )
+
+    await answer_callback(callback, "Going back…")
