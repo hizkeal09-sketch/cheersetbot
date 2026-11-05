@@ -15,6 +15,9 @@ target-version = "py312"
 line-length = 100
 exclude = ["migrations/versions"]
 
+[tool.vercel]
+entrypoint = "vercel_app:app"
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
