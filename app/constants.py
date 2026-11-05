@@ -8,7 +8,6 @@ from enum import StrEnum
 class Gender(StrEnum):
     MAN = "man"
     WOMAN = "woman"
-    NON_BINARY = "non_binary"
 
 
 class Preference(StrEnum):
@@ -64,13 +63,11 @@ class BroadcastStatus(StrEnum):
 GENDER_LABELS: dict[Gender, str] = {
     Gender.MAN: "👨 Man",
     Gender.WOMAN: "👩 Woman",
-    Gender.NON_BINARY: "🌈 Non-binary",
 }
 
 GENDER_LABELS_SHORT: dict[Gender, str] = {
     Gender.MAN: "Man",
     Gender.WOMAN: "Woman",
-    Gender.NON_BINARY: "Non-binary",
 }
 
 PREFERENCE_LABELS: dict[Preference, str] = {

@@ -139,11 +139,23 @@ class DiscoveryService:
             User.id.not_in(sa.select(matched.c.id)),
         ]
 
-        # Viewer's stated preference.
-        if viewer.interested_in == Preference.MEN:
-            conditions.append(User.gender == Gender.MAN)
-        elif viewer.interested_in == Preference.WOMEN:
-            conditions.append(User.gender == Gender.WOMAN)
+        # Target gender: explicit filter > registration preference > auto opposite-sex.
+        # When no preference is set (EVERYONE + no filter), match the opposite sex
+        # so men see women and women see men by default.
+        target_gender: Gender | None = None
+        if flt and flt.gender is not None:
+            target_gender = flt.gender
+        elif viewer.interested_in == Preference.MEN:
+            target_gender = Gender.MAN
+        elif viewer.interested_in == Preference.WOMEN or viewer.gender == Gender.MAN:
+            target_gender = Gender.WOMAN
+        elif viewer.gender == Gender.WOMAN:
+            target_gender = Gender.MAN
+        # NON_BINARY or unknown viewer gender: no automatic gender filter.
+        # (Only Man and Woman are supported in this version.)
+
+        if target_gender is not None:
+            conditions.append(User.gender == target_gender)
 
         # Reciprocal preference: the candidate must also be open to the viewer.
         if viewer.gender == Gender.MAN:
@@ -160,8 +172,6 @@ class DiscoveryService:
         else:
             conditions.append(User.interested_in == Preference.EVERYONE)
 
-        if flt and flt.gender is not None:
-            conditions.append(User.gender == flt.gender)
         if flt and flt.city:
             conditions.append(sa.func.lower(User.city) == flt.city.lower())
         if flt and flt.active_recently_only:

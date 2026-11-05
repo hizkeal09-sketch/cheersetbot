@@ -39,14 +39,14 @@ async def test_candidate_respects_gender_and_reciprocal_preference(session, sett
 async def test_candidate_respects_age_range_and_city(session, settings) -> None:
     viewer = await make_user(session, 2010, city="Addis Ababa")
     too_young = await make_user(
-        session, 2011, birth_date=date.today() - timedelta(days=365 * 19), city="Addis Ababa"
+        session, 2011, birth_date=date.today() - timedelta(days=365 * 19), city="Addis Ababa", gender=Gender.WOMAN
     )
     too_old = await make_user(
-        session, 2012, birth_date=date.today() - timedelta(days=365 * 55), city="Addis Ababa"
+        session, 2012, birth_date=date.today() - timedelta(days=365 * 55), city="Addis Ababa", gender=Gender.WOMAN
     )
-    other_city = await make_user(session, 2013, city="Hawassa")
+    other_city = await make_user(session, 2013, city="Hawassa", gender=Gender.WOMAN)
     perfect = await make_user(
-        session, 2014, birth_date=date.today() - timedelta(days=365 * 30), city="Addis Ababa"
+        session, 2014, birth_date=date.today() - timedelta(days=365 * 30), city="Addis Ababa", gender=Gender.WOMAN
     )
 
     await DiscoveryService.update_filter(session, viewer, min_age=25, max_age=35, city="Addis Ababa")
@@ -58,7 +58,7 @@ async def test_candidate_respects_age_range_and_city(session, settings) -> None:
 
 async def test_seen_profiles_are_not_repeated(session, settings) -> None:
     viewer = await make_user(session, 2020)
-    target = await make_user(session, 2021)
+    target = await make_user(session, 2021, gender=Gender.WOMAN)
     assert (await DiscoveryService.get_next_candidate(session, viewer, settings)).id == target.id
 
     recorded = await DiscoveryService.record_shown(session, viewer, target, settings)
@@ -112,9 +112,9 @@ async def test_paused_profile_cannot_discover(session, settings) -> None:
 
 async def test_blocked_and_reported_users_are_excluded(session, settings) -> None:
     viewer = await make_user(session, 2040)
-    blocked = await make_user(session, 2041)
-    reported = await make_user(session, 2042)
-    allowed = await make_user(session, 2043)
+    blocked = await make_user(session, 2041, gender=Gender.WOMAN)
+    reported = await make_user(session, 2042, gender=Gender.WOMAN)
+    allowed = await make_user(session, 2043, gender=Gender.WOMAN)
 
     await ModerationService.block_user(session, viewer, blocked.id)
     await ModerationService.report_user(session, viewer, reported.id, ReportReason.SPAM)
@@ -178,3 +178,57 @@ async def test_likes_received_excludes_blocked_people(session, settings) -> None
     people, total = await DiscoveryService.likes_received(session, viewer)
     assert total == 1
     assert [person.id for person in people] == [admirer.id]
+
+
+async def test_auto_opposite_sex_man_sees_women(session, settings) -> None:
+    """Man with no explicit preference (EVERYONE) sees women by default."""
+    viewer = await make_user(
+        session, 2101, gender=Gender.MAN, interested_in=Preference.EVERYONE
+    )
+    woman = await make_user(
+        session, 2102, first_name="Hanna", gender=Gender.WOMAN, interested_in=Preference.EVERYONE
+    )
+    man = await make_user(
+        session, 2103, first_name="Dawit", gender=Gender.MAN, interested_in=Preference.EVERYONE
+    )
+
+    candidate = await DiscoveryService.get_next_candidate(session, viewer, settings)
+    assert candidate is not None
+    assert candidate.id == woman.id
+    assert candidate.id != man.id
+
+
+async def test_auto_opposite_sex_woman_sees_men(session, settings) -> None:
+    """Woman with no explicit preference (EVERYONE) sees men by default."""
+    viewer = await make_user(
+        session, 2111, gender=Gender.WOMAN, interested_in=Preference.EVERYONE
+    )
+    man = await make_user(
+        session, 2112, first_name="Dawit", gender=Gender.MAN, interested_in=Preference.EVERYONE
+    )
+    woman = await make_user(
+        session, 2113, first_name="Hanna", gender=Gender.WOMAN, interested_in=Preference.EVERYONE
+    )
+
+    candidate = await DiscoveryService.get_next_candidate(session, viewer, settings)
+    assert candidate is not None
+    assert candidate.id == man.id
+    assert candidate.id != woman.id
+
+
+async def test_auto_opposite_sex_respects_explicit_preference(session, settings) -> None:
+    """Explicit interested_in overrides auto opposite-sex."""
+    viewer = await make_user(
+        session, 2121, gender=Gender.MAN, interested_in=Preference.MEN
+    )
+    man = await make_user(
+        session, 2122, first_name="Dawit", gender=Gender.MAN, interested_in=Preference.EVERYONE
+    )
+    woman = await make_user(
+        session, 2123, first_name="Hanna", gender=Gender.WOMAN, interested_in=Preference.EVERYONE
+    )
+
+    candidate = await DiscoveryService.get_next_candidate(session, viewer, settings)
+    assert candidate is not None
+    assert candidate.id == man.id
+    assert candidate.id != woman.id
