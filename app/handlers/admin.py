@@ -164,6 +164,8 @@ def _report_text(report: Report) -> str:
     ]
     if report.details:
         lines += ["", f"Details: <i>{html.escape(report.details)}</i>"]
+    if report.admin_notes:
+        lines += ["", f"<b>Moderator notes:</b> <i>{html.escape(report.admin_notes)}</i>"]
     if report.reviewed_by:
         when = as_utc(report.reviewed_at)
         lines.append(f"\nReviewed by tg {report.reviewed_by}" + (f" at {when:%d %b %Y %H:%M} UTC" if when else ""))
@@ -182,6 +184,54 @@ async def cb_admin_report(
         return
     await answer_callback(callback)
     await safe_edit(callback, _report_text(report), admin_report_detail_keyboard(report))
+
+
+@router.callback_query(F.data.startswith("adm:report_notes:"))
+async def cb_admin_report_notes(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """Set moderator notes on a report."""
+    try:
+        report_id = int((callback.data or "").split(":")[2])
+        report = await ModerationService.get_report(session, report_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"Report not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    await state.set_state(AdminFlow.report_notes)
+    await state.update_data(report_notes_id=report_id)
+    current = report.admin_notes or ""
+    await safe_edit(
+        callback,
+        f"📝 <b>Edit moderator notes for Report #{report_id}</b>\n\n"
+        f"Current notes:\n<i>{html.escape(current) if current else '(none)'}</i>\n\n"
+        "Send the new notes text. Use /cancel to abort.",
+        admin_back_keyboard(f"adm:report:{report_id}"),
+    )
+
+
+@router.message(StateFilter(AdminFlow.report_notes), F.text)
+async def msg_admin_report_notes(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    data = await state.get_data()
+    report_id = data.get("report_notes_id")
+    notes = (message.text or "").strip()
+    if not notes:
+        await message.answer("Notes cannot be empty. Send text or /cancel to abort.")
+        return
+    try:
+        report = await ModerationService.get_report(session, report_id)
+        report.admin_notes = notes
+        await session.commit()
+        await state.clear()
+        await message.answer(
+            f"✅ Notes saved for Report #{report_id}.",
+            reply_markup=admin_back_keyboard(f"adm:report:{report_id}"),
+        )
+    except (ValueError, CheersError) as exc:
+        await message.answer(f"Could not save notes: {exc}")
+        return
 
 
 @router.callback_query(F.data.startswith("adm:ban:"))
@@ -448,15 +498,64 @@ async def _refresh_admin_user(
 ) -> None:
     user = await UserService.get_by_id(session, user_id)
     reports = await AdminService.report_count_against(session, user.id)
+    notes_line = f"\nModerator notes: <i>{html.escape(user.moderation_notes)}</i>" if user.moderation_notes else ""
     text = (
         f"👤 <b>User #{user.id}</b>\n\n"
         f"Name: <b>{html.escape(user.first_name)}</b>\n"
         f"Telegram ID: <code>{user.telegram_id}</code>\n"
         f"Status: {'🚫 banned' if user.is_banned else ('⏸ paused' if user.profile_paused else '🟢 active')}\n"
         f"Premium: {'👑 yes' if user.is_premium else 'no'}\n"
-        f"Reports against: <b>{reports}</b>"
+        f"Reports against: <b>{reports}</b>{notes_line}"
     )
     await safe_edit(callback, text, admin_user_detail_keyboard(user))
+
+
+@router.callback_query(F.data.startswith("adm:user_notes:"))
+async def cb_admin_user_notes(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """Set moderator notes on a user."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        user = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    await state.set_state(AdminFlow.user_notes)
+    await state.update_data(user_notes_id=user_id)
+    current = user.moderation_notes or ""
+    await safe_edit(
+        callback,
+        f"📝 <b>Edit moderator notes for User #{user_id}</b>\n\n"
+        f"Current notes:\n<i>{html.escape(current) if current else '(none)'}</i>\n\n"
+        "Send the new notes text. Use /cancel to abort.",
+        admin_back_keyboard(f"adm:user:{user_id}"),
+    )
+
+
+@router.message(StateFilter(AdminFlow.user_notes), F.text)
+async def msg_admin_user_notes(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    data = await state.get_data()
+    user_id = data.get("user_notes_id")
+    notes = (message.text or "").strip()
+    if not notes:
+        await message.answer("Notes cannot be empty. Send text or /cancel to abort.")
+        return
+    try:
+        user = await UserService.get_by_id(session, user_id)
+        user.moderation_notes = notes
+        await session.commit()
+        await state.clear()
+        await message.answer(
+            f"✅ Notes saved for User #{user_id}.",
+            reply_markup=admin_back_keyboard(f"adm:user:{user_id}"),
+        )
+    except (ValueError, CheersError) as exc:
+        await message.answer(f"Could not save notes: {exc}")
+        return
 
 
 @router.callback_query(F.data.startswith("adm:grant:"))

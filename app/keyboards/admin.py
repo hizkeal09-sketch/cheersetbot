@@ -65,6 +65,7 @@ def admin_report_detail_keyboard(report: Report) -> InlineKeyboardMarkup:
                 Btn(text="⚪ Dismiss", callback_data=f"adm:dismiss:{report.id}"),
             ]
         )
+    rows.append([Btn(text="📝 Add/Edit notes", callback_data=f"adm:report_notes:{report.id}")])
     rows.append([Btn(text="⬅️ Reports", callback_data="adm:reports:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -113,6 +114,7 @@ def admin_user_detail_keyboard(user: User) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [ban_button, premium_button],
+            [Btn(text="📝 Add/Edit notes", callback_data=f"adm:user_notes:{user.id}")],
             [Btn(text="🗑 Delete user data", callback_data=f"adm:user_delete:{user.id}")],
             [Btn(text="🚩 View reports", callback_data="adm:reports:0")],
             [Btn(text="⬅️ Users", callback_data="adm:users:0")],

@@ -76,6 +76,7 @@ class User(TimestampMixin, Base):
     profile_paused: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, server_default=sa.false(), nullable=False
     )
+    moderation_notes: Mapped[str | None] = mapped_column(sa.Text)
     is_banned: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, server_default=sa.false(), nullable=False, index=True
     )

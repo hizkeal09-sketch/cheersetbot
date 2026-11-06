@@ -45,3 +45,5 @@ class AdminFlow(StatesGroup):
     search = State()
     broadcast = State()
     delete_confirm = State()
+    report_notes = State()
+    user_notes = State()
