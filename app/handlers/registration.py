@@ -261,14 +261,9 @@ async def msg_phone_contact(message: Message, state: FSMContext, session: AsyncS
 
 @router.message(StateFilter(Registration.phone), F.text)
 async def msg_phone_text(message: Message, state: FSMContext) -> None:
-    text = (message.text or "").strip()
-    if text in {"⏭ Skip", "skip"}:
-        await state.update_data(phone_number=None)
-        await _after_phone(message, state)
-        return
     await message.answer(
-        "Please tap the '📱 Share My Phone Number' button to share your contact, "
-        "or tap Skip to continue without a phone number.",
+        "Please tap the '📱 Share My Phone Number' button to share your contact. "
+        "Phone number is required.",
         reply_markup=phone_keyboard(),
     )
 

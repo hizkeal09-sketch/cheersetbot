@@ -103,11 +103,10 @@ def confirm_keyboard() -> InlineKeyboardMarkup:
 
 
 def phone_keyboard() -> ReplyKeyboardMarkup:
-    """Share phone number via Telegram contact button."""
+    """Share phone number via Telegram contact button (mandatory)."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📱 Share My Phone Number", request_contact=True)],
-            [KeyboardButton(text="⏭ Skip")],
         ],
         resize_keyboard=True,
         one_time_keyboard=True,

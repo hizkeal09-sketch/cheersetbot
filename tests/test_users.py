@@ -24,6 +24,7 @@ def registration_data(**overrides) -> RegistrationData:
         intention=Intention.SERIOUS,
         interests=["music", "coffee"],
         bio="I enjoy live music and good coffee.",
+        phone_number="+1234567890",
         photos=[
             {"file_id": "photo-1", "moderation_status": "approved", "moderation_reason": None},
             {"file_id": "photo-2", "moderation_status": "approved", "moderation_reason": None},
