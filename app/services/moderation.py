@@ -421,7 +421,7 @@ class ModerationService:
         session: AsyncSession, user: User
     ) -> tuple[bool, str | None]:
         """Check if user can send messages. Returns (allowed, reason)."""
-        from datetime import date, timedelta
+        from datetime import date
 
         today = date.today()
 
@@ -432,20 +432,16 @@ class ModerationService:
             await session.commit()
 
         # Check if new account is restricted
-        if user.new_account_restricted_until:
-            from datetime import datetime
-
-            if utcnow() < user.new_account_restricted_until:
-                remaining = user.new_account_restricted_until - utcnow()
-                hours = remaining.total_seconds() / 3600
-                return False, f"New account restricted. Messaging available in {hours:.1f} hours."
+        if user.new_account_restricted_until and utcnow() < user.new_account_restricted_until:
+            remaining = user.new_account_restricted_until - utcnow()
+            hours = remaining.total_seconds() / 3600
+            return False, f"New account restricted. Messaging available in {hours:.1f} hours."
 
         # Check daily message limit for new accounts (less than 7 days old)
         if user.registration_completed_at:
             days_since_reg = (utcnow() - user.registration_completed_at).days
-            if days_since_reg < 7:
-                if user.messages_today >= 20:
-                    return False, "Daily message limit reached for new accounts (20/day)."
+            if days_since_reg < 7 and user.messages_today >= 20:
+                return False, "Daily message limit reached for new accounts (20/day)."
 
         return True, None
 
