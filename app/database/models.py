@@ -139,6 +139,10 @@ class UserPhoto(Base):
     )
     file_id: Mapped[str] = mapped_column(sa.Text, nullable=False)
     position: Mapped[int] = mapped_column(sa.Integer, default=0, nullable=False)
+    moderation_status: Mapped[str] = mapped_column(
+        sa.String(16), default="pending", server_default="pending", nullable=False
+    )
+    moderation_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="photos")
 

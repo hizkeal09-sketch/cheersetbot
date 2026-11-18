@@ -24,7 +24,10 @@ def registration_data(**overrides) -> RegistrationData:
         intention=Intention.SERIOUS,
         interests=["music", "coffee"],
         bio="I enjoy live music and good coffee.",
-        photos=["photo-1", "photo-2"],
+        photos=[
+            {"file_id": "photo-1", "moderation_status": "approved", "moderation_reason": None},
+            {"file_id": "photo-2", "moderation_status": "approved", "moderation_reason": None},
+        ],
     )
     values.update(overrides)
     return RegistrationData(**values)
@@ -67,7 +70,14 @@ async def test_complete_registration_rejects_invalid_payload(session) -> None:
 async def test_replace_photos_keeps_positions_unique(session) -> None:
     user = await UserService.get_or_create(session, tg_user(1004))
     user = await UserService.complete_registration(session, user, registration_data())
-    user = await UserService.replace_photos(session, user, ["new-a", "new-b", "new-c"])
+    user = await UserService.replace_photos(
+        session, user,
+        [
+            {"file_id": "new-a", "moderation_status": "approved", "moderation_reason": None},
+            {"file_id": "new-b", "moderation_status": "approved", "moderation_reason": None},
+            {"file_id": "new-c", "moderation_status": "approved", "moderation_reason": None},
+        ]
+    )
     assert [p.file_id for p in user.photos] == ["new-a", "new-b", "new-c"]
     assert [p.position for p in user.photos] == [0, 1, 2]
     assert await count(session, UserPhoto) == 3

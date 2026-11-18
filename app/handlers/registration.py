@@ -13,6 +13,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.constants import (
     CITIES,
     GENDER_LABELS,
@@ -43,6 +44,7 @@ from app.keyboards.registration import (
     religion_keyboard,
 )
 from app.services.errors import CheersError
+from app.services.nvidia_ai import NVIDIAService
 from app.services.users import RegistrationData, UserService
 from app.states.forms import Registration
 from app.utils.render import answer_callback, safe_edit, send_profile_card
@@ -388,7 +390,9 @@ async def cb_intention(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(Registration.photos), F.photo)
-async def msg_photo(message: Message, state: FSMContext) -> None:
+async def msg_photo(
+    message: Message, state: FSMContext, settings: Settings
+) -> None:
     if not message.photo:
         return
     data = await state.get_data()
@@ -396,11 +400,46 @@ async def msg_photo(message: Message, state: FSMContext) -> None:
     if len(photos) >= MAX_PHOTOS:
         await message.answer(f"📸 You already have {MAX_PHOTOS} photos. Tap <b>Continue</b>.")
         return
-    photos.append(message.photo[-1].file_id)
+
+    photo_file_id = message.photo[-1].file_id
+
+    # Moderate the photo with NVIDIA AI
+    nvidia = NVIDIAService(settings)
+    try:
+        # Get a public URL for the photo - we need to get file info from Telegram
+        file_info = await message.bot.get_file(photo_file_id)
+        file_url = f"https://api.telegram.org/file/bot{settings.bot_token.get_secret_value()}/{file_info.file_path}"
+
+        moderation = await nvidia.moderate_image(file_url)
+    except Exception:
+        moderation = None
+    finally:
+        await nvidia.close()
+
+    # Store photo with moderation status
+    photo_entry = {
+        "file_id": photo_file_id,
+        "moderation_status": moderation.is_safe if moderation else "pending",
+        "moderation_reason": moderation.reason if moderation else "AI moderation unavailable",
+        "needs_review": moderation.needs_review if moderation else True,
+    }
+    photos.append(photo_entry)
     await state.update_data(photos=photos)
+
+    # Build response based on moderation result
+    if moderation and not moderation.is_safe:
+        status_text = f"⚠️ Photo flagged: {moderation.reason or 'Inappropriate content'}"
+        if moderation.needs_review:
+            status_text += "\nThis photo has been flagged for admin review."
+    elif moderation and moderation.needs_review:
+        status_text = "🔍 Photo sent for admin review."
+    else:
+        status_text = "✅ Photo approved."
+
     remaining = MAX_PHOTOS - len(photos)
     await message.answer(
-        f"✅ Photo {len(photos)}/{MAX_PHOTOS} added."
+        f"{status_text}\n\n"
+        f"📸 Photo {len(photos)}/{MAX_PHOTOS} added."
         + (f"\nSend another ({remaining} slot(s) left) or tap Continue." if remaining else "\nThat's the maximum — tap Continue."),
         reply_markup=photos_keyboard(True),
     )
@@ -427,13 +466,31 @@ async def cb_photo_remove(callback: CallbackQuery, state: FSMContext) -> None:
 async def cb_photo_done(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     photos = list(data.get("photos", []))
+    
+    # Filter out rejected photos
+    approved_photos = [p for p in photos if p.get("moderation_status") != "rejected"]
+    rejected_count = len(photos) - len(approved_photos)
+    
+    if rejected_count > 0:
+        await state.update_data(photos=approved_photos)
+        photos = approved_photos
+    
     try:
         validate_photo_count(len(photos))
     except ValidationError as exc:
         await answer_callback(callback, str(exc), alert=True)
         return
+    
+    if rejected_count > 0:
+        await answer_callback(
+            callback,
+            f"{rejected_count} photo(s) rejected by AI moderation and removed.",
+            alert=True,
+        )
+    else:
+        await answer_callback(callback)
+    
     await state.set_state(Registration.confirm)
-    await answer_callback(callback)
     await safe_edit(callback, _preview(data), confirm_keyboard())
 
 

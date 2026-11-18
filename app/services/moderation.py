@@ -5,8 +5,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import ReportReason, ReportStatus
-from app.database.models import AdminAction, Block, Match, Report, User
+from app.constants import PhotoModerationStatus, ReportReason, ReportStatus
+from app.database.models import AdminAction, Block, Match, Report, User, UserPhoto
 from app.services.errors import InvalidTargetError, ReportAlreadyOpenError
 from app.services.matches import MatchService
 from app.utils.time import utcnow
@@ -215,6 +215,69 @@ class ModerationService:
                 sa.select(sa.func.count())
                 .select_from(Report)
                 .where(Report.status.in_((ReportStatus.OPEN, ReportStatus.REVIEWING)))
+            )
+            or 0
+        )
+
+    @staticmethod
+    async def list_pending_photos(
+        session: AsyncSession, offset: int = 0, limit: int = 10
+    ) -> tuple[list[UserPhoto], int]:
+        """List photos pending moderation."""
+        total = int(
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(UserPhoto)
+                .where(UserPhoto.moderation_status == PhotoModerationStatus.PENDING)
+            )
+            or 0
+        )
+        result = await session.scalars(
+            sa.select(UserPhoto)
+            .where(UserPhoto.moderation_status == PhotoModerationStatus.PENDING)
+            .order_by(UserPhoto.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.unique()), total
+
+    @staticmethod
+    async def get_photo(session: AsyncSession, photo_id: int) -> UserPhoto:
+        photo = await session.get(UserPhoto, photo_id)
+        if photo is None:
+            raise InvalidTargetError("Photo not found.")
+        return photo
+
+    @staticmethod
+    async def moderate_photo(
+        session: AsyncSession,
+        photo_id: int,
+        admin_telegram_id: int,
+        status: PhotoModerationStatus,
+        reason: str | None = None,
+    ) -> UserPhoto:
+        """Approve or reject a photo."""
+        photo = await ModerationService.get_photo(session, photo_id)
+        photo.moderation_status = status
+        photo.moderation_reason = reason
+        session.add(
+            AdminAction(
+                admin_telegram_id=admin_telegram_id,
+                action=f"photo_{status.value}",
+                target_user_id=photo.user_id,
+                details=f"Photo #{photo.id}",
+            )
+        )
+        await session.commit()
+        return photo
+
+    @staticmethod
+    async def count_pending_photos(session: AsyncSession) -> int:
+        return int(
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(UserPhoto)
+                .where(UserPhoto.moderation_status == PhotoModerationStatus.PENDING)
             )
             or 0
         )

@@ -5,7 +5,8 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton as Btn
 from aiogram.types import InlineKeyboardMarkup
 
-from app.database.models import Report, User
+from app.constants import PHOTO_MODERATION_LABELS, PhotoModerationStatus
+from app.database.models import Report, User, UserPhoto
 
 
 def admin_dashboard_keyboard() -> InlineKeyboardMarkup:
@@ -20,10 +21,13 @@ def admin_dashboard_keyboard() -> InlineKeyboardMarkup:
                 Btn(text="🔎 Search", callback_data="adm:search"),
             ],
             [
-                Btn(text="📢 Broadcast", callback_data="adm:broadcast"),
+                Btn(text="📸 Photo Moderation", callback_data="adm:moderation"),
                 Btn(text="📜 Audit log", callback_data="adm:audit"),
             ],
-            [Btn(text="🏠 Main menu", callback_data="menu:home")],
+            [
+                Btn(text="📢 Broadcast", callback_data="adm:broadcast"),
+                Btn(text="🏠 Main menu", callback_data="menu:home"),
+            ],
         ]
     )
 
@@ -151,3 +155,71 @@ def admin_back_keyboard(target: str = "adm:home") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[Btn(text="⬅️ Back", callback_data=target)]]
     )
+
+
+def admin_photo_moderation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [Btn(text="📸 Pending Photos", callback_data="adm:photos:pending:0")],
+            [Btn(text="🚩 Flagged Photos", callback_data="adm:photos:flagged:0")],
+            [Btn(text="⬅️ Dashboard", callback_data="adm:home")],
+        ]
+    )
+
+
+def admin_photos_list_keyboard(
+    photos: list[UserPhoto], page: int, has_next: bool, filter_type: str = "pending"
+) -> InlineKeyboardMarkup:
+    rows: list[list[Btn]] = []
+    for photo in photos:
+        status_label = PHOTO_MODERATION_LABELS.get(
+            PhotoModerationStatus(photo.moderation_status), photo.moderation_status
+        )
+        rows.append(
+            [
+                Btn(
+                    text=f"📸 Photo #{photo.id} · {status_label}",
+                    callback_data=f"adm:photo:{photo.id}",
+                )
+            ]
+        )
+    nav: list[Btn] = []
+    if page > 0:
+        nav.append(Btn(text="⬅️ Previous", callback_data=f"adm:photos:{filter_type}:{page - 1}"))
+    if has_next:
+        nav.append(Btn(text="Next ➡️", callback_data=f"adm:photos:{filter_type}:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append(
+        [
+            Btn(text="🔎 Filter: Pending", callback_data="adm:photos:pending:0"),
+            Btn(text="🚩 Filter: Flagged", callback_data="adm:photos:flagged:0"),
+        ]
+    )
+    rows.append([Btn(text="⬅️ Moderation", callback_data="adm:moderation")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_photo_detail_keyboard(photo: UserPhoto) -> InlineKeyboardMarkup:
+    status = PhotoModerationStatus(photo.moderation_status)
+    rows: list[list[Btn]] = []
+    if status == PhotoModerationStatus.PENDING:
+        rows.append(
+            [
+                Btn(text="✅ Approve", callback_data=f"adm:photo_approve:{photo.id}"),
+                Btn(text="❌ Reject", callback_data=f"adm:photo_reject:{photo.id}"),
+            ]
+        )
+    elif status == PhotoModerationStatus.REJECTED:
+        rows.append(
+            [Btn(text="✅ Re-approve", callback_data=f"adm:photo_approve:{photo.id}")]
+        )
+    elif status == PhotoModerationStatus.FLAGGED:
+        rows.append(
+            [
+                Btn(text="✅ Approve", callback_data=f"adm:photo_approve:{photo.id}"),
+                Btn(text="❌ Reject", callback_data=f"adm:photo_reject:{photo.id}"),
+            ]
+        )
+    rows.append([Btn(text="⬅️ Back to photos", callback_data="adm:photos:pending:0")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

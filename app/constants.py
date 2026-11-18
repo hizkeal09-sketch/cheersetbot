@@ -66,6 +66,13 @@ class BroadcastStatus(StrEnum):
     FAILED = "failed"
 
 
+class PhotoModerationStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    FLAGGED = "flagged"
+
+
 GENDER_LABELS: dict[Gender, str] = {
     Gender.MAN: "👨 Man",
     Gender.WOMAN: "👩 Woman",
@@ -125,6 +132,13 @@ REPORT_STATUS_LABELS: dict[ReportStatus, str] = {
     ReportStatus.REVIEWING: "🔵 Reviewing",
     ReportStatus.RESOLVED: "🟢 Resolved",
     ReportStatus.DISMISSED: "⚪ Dismissed",
+}
+
+PHOTO_MODERATION_LABELS: dict[PhotoModerationStatus, str] = {
+    PhotoModerationStatus.PENDING: "⏳ Pending",
+    PhotoModerationStatus.APPROVED: "✅ Approved",
+    PhotoModerationStatus.REJECTED: "❌ Rejected",
+    PhotoModerationStatus.FLAGGED: "🚩 Flagged",
 }
 
 # key -> label. Keys are stored in the database.

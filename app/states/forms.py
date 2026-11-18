@@ -48,3 +48,4 @@ class AdminFlow(StatesGroup):
     delete_confirm = State()
     report_notes = State()
     user_notes = State()
+    reject_photo_reason = State()

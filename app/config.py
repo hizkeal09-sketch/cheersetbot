@@ -59,6 +59,19 @@ class Settings(BaseSettings):
     rate_limit_events: int = Field(default=12, ge=1, le=1_000)
     rate_limit_window_seconds: int = Field(default=10, ge=1, le=3_600)
 
+    # NVIDIA Build AI integration (optional)
+    nvidia_api_key: SecretStr = SecretStr("")
+    nvidia_model: str = "meta/llama-3.1-8b-instruct"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+
+    @field_validator("nvidia_api_key")
+    @classmethod
+    def _validate_nvidia_key(cls, value: SecretStr) -> SecretStr:
+        key = value.get_secret_value()
+        if key and not key.startswith("nvapi-"):
+            raise ValueError("NVIDIA_API_KEY should start with 'nvapi-'")
+        return value
+
     @field_validator("log_level")
     @classmethod
     def _valid_log_level(cls, value: str) -> str:

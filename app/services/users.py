@@ -35,7 +35,7 @@ class RegistrationData:
     intention: Intention
     interests: list[str] = field(default_factory=list)
     bio: str | None = None
-    photos: list[str] = field(default_factory=list)
+    photos: list[dict] = field(default_factory=list)
     latitude: float | None = None
     longitude: float | None = None
     consent_at: datetime | None = None
@@ -163,24 +163,37 @@ class UserService:
         return user
 
     @staticmethod
-    async def _set_photos(session: AsyncSession, user: User, file_ids: list[str]) -> None:
+    async def _set_photos(
+        session: AsyncSession, user: User, photos: list[dict]
+    ) -> None:
         """Replace photos safely.
 
         Old rows are flushed before the new rows are inserted, otherwise the
         unique constraint on (user_id, position) can fire depending on the
         unit-of-work ordering.
+
+        Each photo dict should contain: file_id, moderation_status, moderation_reason.
         """
         if user.photos:
             user.photos.clear()
             await session.flush()
-        for index, file_id in enumerate(file_ids[:3]):
-            user.photos.append(UserPhoto(file_id=file_id, position=index))
+        for index, photo in enumerate(photos[:3]):
+            user.photos.append(
+                UserPhoto(
+                    file_id=photo["file_id"],
+                    position=index,
+                    moderation_status=photo.get("moderation_status", "pending"),
+                    moderation_reason=photo.get("moderation_reason"),
+                )
+            )
 
     @staticmethod
-    async def replace_photos(session: AsyncSession, user: User, file_ids: list[str]) -> User:
-        validate_photo_count(len(file_ids))
+    async def replace_photos(
+        session: AsyncSession, user: User, photos: list[dict]
+    ) -> User:
+        validate_photo_count(len(photos))
         await session.refresh(user, ["photos"])
-        await UserService._set_photos(session, user, file_ids)
+        await UserService._set_photos(session, user, photos)
         await session.commit()
         return user
 

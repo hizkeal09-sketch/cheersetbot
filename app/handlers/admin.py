@@ -17,13 +17,22 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.constants import REPORT_REASON_LABELS, REPORT_STATUS_LABELS, ReportStatus
+from app.constants import (
+    PHOTO_MODERATION_LABELS,
+    REPORT_REASON_LABELS,
+    REPORT_STATUS_LABELS,
+    PhotoModerationStatus,
+    ReportStatus,
+)
 from app.database.models import Report
 from app.keyboards.admin import (
     admin_back_keyboard,
     admin_broadcast_keyboard,
     admin_broadcast_resume_keyboard,
     admin_dashboard_keyboard,
+    admin_photo_detail_keyboard,
+    admin_photo_moderation_keyboard,
+    admin_photos_list_keyboard,
     admin_report_detail_keyboard,
     admin_reports_keyboard,
     admin_user_detail_keyboard,
@@ -761,3 +770,155 @@ async def cb_admin_audit(
         details = f" ({html.escape(action.details)})" if action.details else ""
         lines.append(f"• {stamp} · {action.action}{target}{details}")
     await safe_edit(callback, "\n".join(lines), admin_back_keyboard("adm:home"))
+
+
+@router.callback_query(F.data == "adm:moderation")
+async def cb_admin_moderation(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Moderation menu: photo moderation."""
+    pending_count = await ModerationService.count_pending_photos(session)
+    open_reports = await ModerationService.count_open_reports(session)
+    await answer_callback(callback)
+    await safe_edit(
+        callback,
+        f"🛡 <b>Moderation Center</b>\n\n"
+        f"📸 Photos pending review: <b>{pending_count}</b>\n"
+        f"🚩 Open reports: <b>{open_reports}</b>\n\n"
+        "Select an option:",
+        admin_photo_moderation_keyboard(),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:photos:"))
+async def cb_admin_photos_list(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """List pending or flagged photos for moderation."""
+    parts = (callback.data or "").split(":")
+    filter_type = parts[2]  # pending or flagged
+    try:
+        page = max(0, int(parts[3]))
+    except (ValueError, IndexError):
+        page = 0
+
+    if filter_type == "flagged":
+        # For now, treat flagged same as pending (photos flagged by AI)
+        photos, total = await ModerationService.list_pending_photos(
+            session, offset=page * PAGE_SIZE, limit=PAGE_SIZE
+        )
+    else:
+        photos, total = await ModerationService.list_pending_photos(
+            session, offset=page * PAGE_SIZE, limit=PAGE_SIZE
+        )
+
+    await answer_callback(callback)
+    if not photos:
+        await safe_edit(
+            callback,
+            "📸 <b>Photo Moderation</b>\n\nNo photos pending review.",
+            admin_back_keyboard("adm:moderation"),
+        )
+        return
+    has_next = total > (page + 1) * PAGE_SIZE
+    await safe_edit(
+        callback,
+        f"📸 <b>Photo Moderation — {filter_type.title()}</b>\n\n{total} photo(s) pending review.\n\nSelect a photo to review:",
+        admin_photos_list_keyboard(photos, page, has_next, filter_type),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:photo:"))
+async def cb_admin_photo_detail(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """View photo detail for moderation."""
+    try:
+        photo_id = int((callback.data or "").split(":")[2])
+        photo = await ModerationService.get_photo(session, photo_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"Photo not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    status_label = PHOTO_MODERATION_LABELS.get(
+        PhotoModerationStatus(photo.moderation_status), photo.moderation_status
+    )
+    reason_text = f"\nReason: {photo.moderation_reason}" if photo.moderation_reason else ""
+    await safe_edit(
+        callback,
+        f"📸 <b>Photo #{photo.id}</b>\n\n"
+        f"User ID: <code>{photo.user_id}</code>\n"
+        f"Position: {photo.position}\n"
+        f"Status: {status_label}{reason_text}\n\n"
+        "Select an action:",
+        admin_photo_detail_keyboard(photo),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:photo_approve:"))
+async def cb_admin_photo_approve(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Approve a photo."""
+    try:
+        photo_id = int((callback.data or "").split(":")[2])
+        photo = await ModerationService.moderate_photo(
+            session, photo_id, callback.from_user.id, PhotoModerationStatus.APPROVED,
+            "Approved by admin",
+        )
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"Could not approve: {exc}", alert=True)
+        return
+    await answer_callback(callback, "Photo approved.")
+    await safe_edit(
+        callback,
+        f"✅ Photo #{photo.id} approved.",
+        admin_photo_detail_keyboard(photo),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:photo_reject:"))
+async def cb_admin_photo_reject(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """Reject a photo and ask for reason."""
+    try:
+        photo_id = int((callback.data or "").split(":")[2])
+        photo = await ModerationService.get_photo(session, photo_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"Photo not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    await state.set_state(AdminFlow.reject_photo_reason)
+    await state.update_data(reject_photo_id=photo_id)
+    await safe_edit(
+        callback,
+        f"📝 <b>Reject Photo #{photo.id}</b>\n\n"
+        "Enter the reason for rejection:",
+        admin_back_keyboard(f"adm:photo:{photo_id}"),
+    )
+
+
+@router.message(StateFilter(AdminFlow.reject_photo_reason), F.text)
+async def msg_admin_photo_reject_reason(
+    message: Message, state: FSMContext, session: AsyncSession
+) -> None:
+    data = await state.get_data()
+    photo_id = data.get("reject_photo_id")
+    reason = (message.text or "").strip()
+    if not reason:
+        await message.answer("Reason cannot be empty. Send text or /cancel to abort.")
+        return
+    try:
+        photo = await ModerationService.moderate_photo(
+            session, photo_id, message.from_user.id,
+            PhotoModerationStatus.REJECTED, reason,
+        )
+        await state.clear()
+        await message.answer(
+            f"❌ Photo #{photo.id} rejected.\nReason: {reason}",
+            reply_markup=admin_back_keyboard(f"adm:photo:{photo.id}"),
+        )
+    except (ValueError, CheersError) as exc:
+        await message.answer(f"Could not reject photo: {exc}")
+        return
