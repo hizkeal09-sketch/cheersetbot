@@ -32,15 +32,14 @@ class RegistrationData:
     interested_in: Preference
     city: str
     intention: Intention
-    phone_number: str
-    religion: Religion | None
+    phone_number: str | None = None
+    religion: Religion | None = None
     interests: list[str] = field(default_factory=list)
     bio: str | None = None
     photos: list[dict] = field(default_factory=list)
     latitude: float | None = None
     longitude: float | None = None
     consent_at: datetime | None = None
-    phone_number: str
 
 
 class UserService:
