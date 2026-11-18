@@ -22,11 +22,11 @@ def admin_dashboard_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 Btn(text="📸 Photo Moderation", callback_data="adm:moderation"),
-                Btn(text="📜 Audit log", callback_data="adm:audit"),
+                Btn(text="🚩 User Moderation", callback_data="adm:moderation"),
             ],
             [
                 Btn(text="📢 Broadcast", callback_data="adm:broadcast"),
-                Btn(text="🏠 Main menu", callback_data="menu:home"),
+                Btn(text="📜 Audit log", callback_data="adm:audit"),
             ],
         ]
     )
@@ -222,4 +222,66 @@ def admin_photo_detail_keyboard(photo: UserPhoto) -> InlineKeyboardMarkup:
             ]
         )
     rows.append([Btn(text="⬅️ Back to photos", callback_data="adm:photos:pending:0")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_moderation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [Btn(text="🚩 Flagged Users", callback_data="adm:flagged:0")],
+            [Btn(text="⚠️ Suspicious Users", callback_data="adm:suspicious:0")],
+            [Btn(text="⬅️ Dashboard", callback_data="adm:home")],
+        ]
+    )
+
+
+def admin_flagged_users_keyboard(
+    users: list[User], page: int, has_next: bool
+) -> InlineKeyboardMarkup:
+    rows: list[list[Btn]] = []
+    for user in users:
+        score_indicator = "🔴" if user.suspicion_score >= 50 else "🟡" if user.suspicion_score >= 30 else "🟢"
+        rows.append(
+            [
+                Btn(
+                    text=f"#{user.id} {user.first_name[:18]}{score_indicator} (s:{user.suspicion_score})",
+                    callback_data=f"adm:user:{user.id}",
+                )
+            ]
+        )
+    nav: list[Btn] = []
+    if page > 0:
+        nav.append(Btn(text="⬅️ Previous", callback_data=f"adm:flagged:{page - 1}"))
+    if has_next:
+        nav.append(Btn(text="Next ➡️", callback_data=f"adm:flagged:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([Btn(text="⬅️ Moderation", callback_data="adm:moderation")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_user_action_keyboard(user: User) -> InlineKeyboardMarkup:
+    rows: list[list[Btn]] = []
+    if user.is_flagged:
+        rows.append(
+            [Btn(text="✅ Unflag User", callback_data=f"adm:user_unflag:{user.id}")]
+        )
+    else:
+        rows.append(
+            [Btn(text="🚩 Flag User", callback_data=f"adm:user_flag:{user.id}")]
+        )
+    if user.new_account_restricted_until:
+        rows.append(
+            [Btn(text="✅ Unrestrict User", callback_data=f"adm:user_unrestrict:{user.id}")]
+        )
+    else:
+        rows.append(
+            [Btn(text="⏰ Restrict 24h", callback_data=f"adm:user_restrict:{user.id}")]
+        )
+    if user.is_banned:
+        rows.append([Btn(text="✅ Unban User", callback_data=f"adm:user_unban:{user.id}")])
+    else:
+        rows.append([Btn(text="🚫 Suspend 7d", callback_data=f"adm:user_suspend:{user.id}")])
+    rows.append([Btn(text="⚠️ Warn User", callback_data=f"adm:user_warn:{user.id}")])
+    rows.append([Btn(text="⬅️ Back to Moderation", callback_data="adm:moderation")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

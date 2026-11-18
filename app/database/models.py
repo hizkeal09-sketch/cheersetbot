@@ -84,7 +84,20 @@ class User(TimestampMixin, Base):
         sa.Boolean, default=False, server_default=sa.false(), nullable=False, index=True
     )
     ban_reason: Mapped[str | None] = mapped_column(sa.Text)
-
+    is_flagged: Mapped[bool] = mapped_column(
+        sa.Boolean, default=False, server_default=sa.false(), nullable=False, index=True
+    )
+    flag_reason: Mapped[str | None] = mapped_column(sa.Text)
+    suspicion_score: Mapped[int] = mapped_column(
+        sa.Integer, default=0, server_default="0", nullable=False
+    )
+    new_account_restricted_until: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    messages_today: Mapped[int] = mapped_column(
+        sa.Integer, default=0, server_default="0", nullable=False
+    )
+    last_message_reset: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     is_premium: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, server_default=sa.false(), nullable=False
     )
@@ -92,7 +105,6 @@ class User(TimestampMixin, Base):
     is_verified: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, server_default=sa.false(), nullable=False
     )
-
     consent_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     registration_completed_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), index=True

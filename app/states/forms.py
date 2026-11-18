@@ -49,3 +49,4 @@ class AdminFlow(StatesGroup):
     report_notes = State()
     user_notes = State()
     reject_photo_reason = State()
+    warn_user_reason = State()

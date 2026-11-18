@@ -281,3 +281,185 @@ class ModerationService:
             )
             or 0
         )
+
+    @staticmethod
+    async def flag_user(
+        session: AsyncSession,
+        admin_telegram_id: int,
+        user: User,
+        reason: str,
+        suspicion_score_increase: int = 10,
+    ) -> User:
+        """Flag a user as suspicious."""
+        user.is_flagged = True
+        user.flag_reason = reason
+        user.suspicion_score = min(100, user.suspicion_score + suspicion_score_increase)
+        session.add(
+            AdminAction(
+                admin_telegram_id=admin_telegram_id,
+                action="flag_user",
+                target_user_id=user.id,
+                details=f"Reason: {reason}, score: {user.suspicion_score}",
+            )
+        )
+        await session.commit()
+        return user
+
+    @staticmethod
+    async def unflag_user(
+        session: AsyncSession, admin_telegram_id: int, user: User
+    ) -> User:
+        """Unflag a user."""
+        user.is_flagged = False
+        user.flag_reason = None
+        user.suspicion_score = max(0, user.suspicion_score - 10)
+        session.add(
+            AdminAction(
+                admin_telegram_id=admin_telegram_id,
+                action="unflag_user",
+                target_user_id=user.id,
+                details="User unflagged",
+            )
+        )
+        await session.commit()
+        return user
+
+    @staticmethod
+    async def increase_suspicion_score(
+        session: AsyncSession, user: User, points: int, reason: str
+    ) -> User:
+        """Increase suspicion score for a user."""
+        user.suspicion_score = min(100, user.suspicion_score + points)
+        if user.suspicion_score >= 50 and not user.is_flagged:
+            user.is_flagged = True
+            user.flag_reason = f"Auto-flagged: suspicion score {user.suspicion_score}"
+        session.add(
+            AdminAction(
+                admin_telegram_id=0,  # System action
+                action="increase_suspicion",
+                target_user_id=user.id,
+                details=f"+{points} points: {reason}, total: {user.suspicion_score}",
+            )
+        )
+        await session.commit()
+        return user
+
+    @staticmethod
+    async def get_flagged_users(
+        session: AsyncSession, offset: int = 0, limit: int = 10
+    ) -> tuple[list[User], int]:
+        """Get list of flagged users."""
+        total = int(
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(User)
+                .where(User.is_flagged.is_(True))
+            )
+            or 0
+        )
+        result = await session.scalars(
+            sa.select(User)
+            .where(User.is_flagged.is_(True))
+            .order_by(User.suspicion_score.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.unique()), total
+
+    @staticmethod
+    async def get_suspicious_users(
+        session: AsyncSession, min_score: int = 30, offset: int = 0, limit: int = 10
+    ) -> tuple[list[User], int]:
+        """Get users with high suspicion score."""
+        total = int(
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(User)
+                .where(User.suspicion_score >= min_score)
+            )
+            or 0
+        )
+        result = await session.scalars(
+            sa.select(User)
+            .where(User.suspicion_score >= min_score)
+            .order_by(User.suspicion_score.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.unique()), total
+
+    @staticmethod
+    async def restrict_new_account(
+        session: AsyncSession, user: User, hours: int = 24
+    ) -> User:
+        """Restrict a new account from messaging for N hours."""
+        from datetime import timedelta
+
+        user.new_account_restricted_until = utcnow() + timedelta(hours=hours)
+        session.add(
+            AdminAction(
+                admin_telegram_id=0,  # System action
+                action="restrict_new_account",
+                target_user_id=user.id,
+                details=f"Restricted for {hours} hours",
+            )
+        )
+        await session.commit()
+        return user
+
+    @staticmethod
+    async def unrestrict_new_account(
+        session: AsyncSession, user: User
+    ) -> User:
+        """Remove new account restrictions."""
+        user.new_account_restricted_until = None
+        await session.commit()
+        return user
+
+    @staticmethod
+    async def check_message_limit(
+        session: AsyncSession, user: User
+    ) -> tuple[bool, str | None]:
+        """Check if user can send messages. Returns (allowed, reason)."""
+        from datetime import date, timedelta
+
+        today = date.today()
+
+        # Reset daily counter if new day
+        if user.last_message_reset != today:
+            user.messages_today = 0
+            user.last_message_reset = today
+            await session.commit()
+
+        # Check if new account is restricted
+        if user.new_account_restricted_until:
+            from datetime import datetime
+
+            if utcnow() < user.new_account_restricted_until:
+                remaining = user.new_account_restricted_until - utcnow()
+                hours = remaining.total_seconds() / 3600
+                return False, f"New account restricted. Messaging available in {hours:.1f} hours."
+
+        # Check daily message limit for new accounts (less than 7 days old)
+        if user.registration_completed_at:
+            days_since_reg = (utcnow() - user.registration_completed_at).days
+            if days_since_reg < 7:
+                if user.messages_today >= 20:
+                    return False, "Daily message limit reached for new accounts (20/day)."
+
+        return True, None
+
+    @staticmethod
+    async def increment_message_count(
+        session: AsyncSession, user: User
+    ) -> None:
+        """Increment message count for today."""
+        from datetime import date
+
+        today = date.today()
+        if user.last_message_reset != today:
+            user.messages_today = 1
+            user.last_message_reset = today
+        else:
+            user.messages_today += 1
+        await session.commit()

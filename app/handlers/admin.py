@@ -9,6 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import sqlalchemy as sa
 from aiogram import BaseMiddleware, Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command, StateFilter
@@ -24,12 +25,13 @@ from app.constants import (
     PhotoModerationStatus,
     ReportStatus,
 )
-from app.database.models import Report
+from app.database.models import AdminAction, Report, User
 from app.keyboards.admin import (
     admin_back_keyboard,
     admin_broadcast_keyboard,
     admin_broadcast_resume_keyboard,
     admin_dashboard_keyboard,
+    admin_flagged_users_keyboard,
     admin_photo_detail_keyboard,
     admin_photo_moderation_keyboard,
     admin_photos_list_keyboard,
@@ -50,7 +52,7 @@ from app.services.premium import PremiumService
 from app.services.users import UserService
 from app.states.forms import AdminFlow
 from app.utils.render import answer_callback, safe_edit
-from app.utils.time import as_utc
+from app.utils.time import as_utc, utcnow
 
 logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task] = set()
@@ -507,14 +509,17 @@ async def _refresh_admin_user(
 ) -> None:
     user = await UserService.get_by_id(session, user_id)
     reports = await AdminService.report_count_against(session, user.id)
-    notes_line = f"\nModerator notes: <i>{html.escape(user.moderation_notes)}</i>" if user.moderation_notes else ""
+    notes_line = "\nModerator notes: <i>" + html.escape(user.moderation_notes) + "</i>" if user.moderation_notes else ""
+    flag_line = f"\n⚠️ Suspicion score: <b>{user.suspicion_score}</b>" if user.suspicion_score > 0 else ""
+    flag_line += "\n🚩 Flagged: <b>Yes</b>" if user.is_flagged else ""
+    restriction_line = f"\n⏰ Restricted until: <b>{user.new_account_restricted_until:%d %b %H:%M}</b>" if user.new_account_restricted_until else ""
     text = (
         f"👤 <b>User #{user.id}</b>\n\n"
         f"Name: <b>{html.escape(user.first_name)}</b>\n"
         f"Telegram ID: <code>{user.telegram_id}</code>\n"
         f"Status: {'🚫 banned' if user.is_banned else ('⏸ paused' if user.profile_paused else '🟢 active')}\n"
         f"Premium: {'👑 yes' if user.is_premium else 'no'}\n"
-        f"Reports against: <b>{reports}</b>{notes_line}"
+        f"Reports against: <b>{reports}</b>{notes_line}{flag_line}{restriction_line}"
     )
     await safe_edit(callback, text, admin_user_detail_keyboard(user))
 
@@ -776,15 +781,22 @@ async def cb_admin_audit(
 async def cb_admin_moderation(
     callback: CallbackQuery, session: AsyncSession
 ) -> None:
-    """Moderation menu: photo moderation."""
+    """Moderation menu: photo and user moderation."""
     pending_count = await ModerationService.count_pending_photos(session)
     open_reports = await ModerationService.count_open_reports(session)
+    flagged_count = int(
+        await session.scalar(
+            sa.select(sa.func.count()).select_from(User).where(User.is_flagged.is_(True))
+        )
+        or 0
+    )
     await answer_callback(callback)
     await safe_edit(
         callback,
         f"🛡 <b>Moderation Center</b>\n\n"
         f"📸 Photos pending review: <b>{pending_count}</b>\n"
-        f"🚩 Open reports: <b>{open_reports}</b>\n\n"
+        f"🚩 Open reports: <b>{open_reports}</b>\n"
+        f"🚩 Flagged users: <b>{flagged_count}</b>\n\n"
         "Select an option:",
         admin_photo_moderation_keyboard(),
     )
@@ -803,7 +815,6 @@ async def cb_admin_photos_list(
         page = 0
 
     if filter_type == "flagged":
-        # For now, treat flagged same as pending (photos flagged by AI)
         photos, total = await ModerationService.list_pending_photos(
             session, offset=page * PAGE_SIZE, limit=PAGE_SIZE
         )
@@ -922,3 +933,218 @@ async def msg_admin_photo_reject_reason(
     except (ValueError, CheersError) as exc:
         await message.answer(f"Could not reject photo: {exc}")
         return
+
+
+@router.callback_query(F.data.startswith("adm:flagged:"))
+async def cb_admin_flagged_users(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """List flagged users."""
+    try:
+        page = max(0, int((callback.data or "").split(":")[2]))
+    except (ValueError, IndexError):
+        page = 0
+    users, total = await ModerationService.get_flagged_users(
+        session, offset=page * PAGE_SIZE, limit=PAGE_SIZE
+    )
+    await answer_callback(callback)
+    if not users:
+        await safe_edit(
+            callback,
+            "🚩 <b>Flagged Users</b>\n\nNo flagged users.",
+            admin_back_keyboard("adm:moderation"),
+        )
+        return
+    has_next = total > (page + 1) * PAGE_SIZE
+    await safe_edit(
+        callback,
+        f"🚩 <b>Flagged Users</b> — {total} total\n\nSelect a user to manage:",
+        admin_flagged_users_keyboard(users, page, has_next),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:suspicious:"))
+async def cb_admin_suspicious_users(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """List suspicious users."""
+    try:
+        page = max(0, int((callback.data or "").split(":")[2]))
+    except (ValueError, IndexError):
+        page = 0
+    users, total = await ModerationService.get_suspicious_users(
+        session, min_score=30, offset=page * PAGE_SIZE, limit=PAGE_SIZE
+    )
+    await answer_callback(callback)
+    if not users:
+        await safe_edit(
+            callback,
+            "⚠️ <b>Suspicious Users</b>\n\nNo suspicious users found.",
+            admin_back_keyboard("adm:moderation"),
+        )
+        return
+    has_next = total > (page + 1) * PAGE_SIZE
+    await safe_edit(
+        callback,
+        f"⚠️ <b>Suspicious Users</b> — {total} total\n\nSelect a user to manage:",
+        admin_flagged_users_keyboard(users, page, has_next),
+    )
+
+
+@router.callback_query(F.data.startswith("adm:user_flag:"))
+async def cb_admin_user_flag(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Flag a user as suspicious."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        user = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await ModerationService.flag_user(
+        session, callback.from_user.id, user, "Flagged by admin", suspicion_score_increase=20
+    )
+    await answer_callback(callback, f"User #{user_id} flagged as suspicious.")
+    await _refresh_admin_user(callback, session, user_id)
+
+
+@router.callback_query(F.data.startswith("adm:user_unflag:"))
+async def cb_admin_user_unflag(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Unflag a user."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        user = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await ModerationService.unflag_user(session, callback.from_user.id, user)
+    await answer_callback(callback, f"User #{user_id} unflagged.")
+    await _refresh_admin_user(callback, session, user_id)
+
+
+@router.callback_query(F.data.startswith("adm:user_warn:"))
+async def cb_admin_user_warn(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession
+) -> None:
+    """Warn a user (send message + increase suspicion)."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        user = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await answer_callback(callback)
+    await state.set_state(AdminFlow.warn_user_reason)
+    await state.update_data(warn_user_id=user_id)
+    await safe_edit(
+        callback,
+        f"⚠️ <b>Warn User #{user_id}</b>\n\n"
+        f"User: {user.first_name}\n"
+        "Enter the warning reason:",
+        admin_back_keyboard(f"adm:user:{user_id}"),
+    )
+
+
+@router.message(StateFilter(AdminFlow.warn_user_reason), F.text)
+async def msg_admin_warn_user_reason(
+    message: Message, state: FSMContext, session: AsyncSession, bot: Bot
+) -> None:
+    data = await state.get_data()
+    user_id = data.get("warn_user_id")
+    reason = (message.text or "").strip()
+    if not reason:
+        await message.answer("Reason cannot be empty. Send text or /cancel to abort.")
+        return
+    try:
+        user = await UserService.get_by_id(session, user_id)
+        await ModerationService.increase_suspicion_score(
+            session, user, points=15, reason=f"Admin warning: {reason}"
+        )
+        await session.commit()
+        await state.clear()
+        await message.answer(
+            f"⚠️ User #{user_id} warned.\nReason: {reason}",
+            reply_markup=admin_back_keyboard(f"adm:user:{user_id}"),
+        )
+        with contextlib.suppress(TelegramAPIError):
+            await bot.send_message(
+                user.telegram_id,
+                f"⚠️ <b>Warning from Cheers Dating Administration</b>\n\n"
+                f"Reason: {reason}\n\n"
+                f"Please review our community guidelines. Repeated violations may result in account suspension.",
+            )
+    except (ValueError, CheersError) as exc:
+        await message.answer(f"Could not warn user: {exc}")
+        return
+
+
+@router.callback_query(F.data.startswith("adm:user_suspend:"))
+async def cb_admin_user_suspend(
+    callback: CallbackQuery, session: AsyncSession, bot: Bot
+) -> None:
+    """Suspend (ban) a user for 7 days."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        target = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    from datetime import timedelta
+
+    target.is_banned = True
+    target.profile_paused = True
+    target.is_active = False
+    target.ban_reason = "Suspended by administrator"
+    target.new_account_restricted_until = utcnow() + timedelta(days=7)
+    session.add(
+        AdminAction(
+            admin_telegram_id=callback.from_user.id,
+            action="suspend_user",
+            target_user_id=user_id,
+            details="Suspended for 7 days",
+        )
+    )
+    await session.commit()
+    with contextlib.suppress(TelegramAPIError):
+        await bot.send_message(
+            target.telegram_id,
+            "🚫 Your Cheers Dating account has been suspended for 7 days.\n\n"
+            "If you believe this is a mistake, contact support.",
+        )
+    await answer_callback(callback, f"User #{user_id} suspended for 7 days.")
+    await _refresh_admin_user(callback, session, user_id)
+
+
+@router.callback_query(F.data.startswith("adm:user_restrict:"))
+async def cb_admin_user_restrict(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Restrict a new account from messaging for 24 hours."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        target = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await ModerationService.restrict_new_account(session, target, hours=24)
+    await answer_callback(callback, f"User #{user_id} restricted from messaging for 24 hours.")
+    await _refresh_admin_user(callback, session, user_id)
+
+
+@router.callback_query(F.data.startswith("adm:user_unrestrict:"))
+async def cb_admin_user_unrestrict(
+    callback: CallbackQuery, session: AsyncSession
+) -> None:
+    """Remove messaging restriction from a user."""
+    try:
+        user_id = int((callback.data or "").split(":")[2])
+        target = await UserService.get_by_id(session, user_id)
+    except (ValueError, IndexError, CheersError) as exc:
+        await answer_callback(callback, f"User not found: {exc}", alert=True)
+        return
+    await ModerationService.unrestrict_new_account(session, target)
+    await answer_callback(callback, f"User #{user_id} unrestricted.")
+    await _refresh_admin_user(callback, session, user_id)
