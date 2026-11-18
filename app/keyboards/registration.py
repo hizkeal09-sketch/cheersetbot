@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton as Btn
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from app.constants import (
     CITIES,
@@ -97,6 +97,28 @@ def confirm_keyboard() -> InlineKeyboardMarkup:
             [Btn(text="🎉 Create my profile", callback_data="reg:confirm")],
             [Btn(text="⬅️ Back", callback_data="reg:back:photos")],
             [Btn(text="🔄 Start over", callback_data="reg:restart")],
+            [Btn(text="✖️ Cancel", callback_data="reg:cancel")],
+        ]
+    )
+
+
+def phone_keyboard() -> ReplyKeyboardMarkup:
+    """Share phone number via Telegram contact button."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📱 Share My Phone Number", request_contact=True)],
+            [KeyboardButton(text="⏭ Skip")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="Tap to share your phone number",
+    )
+
+
+def phone_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [Btn(text="⬅️ Back", callback_data="reg:back:city")],
             [Btn(text="✖️ Cancel", callback_data="reg:cancel")],
         ]
     )

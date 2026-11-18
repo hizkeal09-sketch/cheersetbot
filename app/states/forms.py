@@ -11,6 +11,7 @@ class Registration(StatesGroup):
     city = State()
     custom_city = State()
     location = State()
+    phone = State()
     bio = State()
     interests = State()
     intention = State()

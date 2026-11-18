@@ -39,6 +39,7 @@ class RegistrationData:
     latitude: float | None = None
     longitude: float | None = None
     consent_at: datetime | None = None
+    phone_number: str | None = None
 
 
 class UserService:
@@ -111,6 +112,7 @@ class UserService:
         user.bio = bio
         user.interests = interests
         user.intention = data.intention
+        user.phone_number = data.phone_number
         user.consent_at = data.consent_at or user.consent_at or utcnow()
         user.registration_completed_at = user.registration_completed_at or utcnow()
         user.is_active = True

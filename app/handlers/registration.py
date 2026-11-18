@@ -10,6 +10,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -36,6 +37,8 @@ from app.keyboards.registration import (
     gender_keyboard,
     intention_keyboard,
     interests_keyboard,
+    phone_back_keyboard,
+    phone_keyboard,
     photos_keyboard,
     religion_keyboard,
 )
@@ -50,6 +53,7 @@ from app.utils.validators import (
     validate_bio,
     validate_city,
     validate_first_name,
+    validate_phone_number,
     validate_photo_count,
 )
 
@@ -218,7 +222,56 @@ async def msg_custom_city(message: Message, state: FSMContext) -> None:
     await _after_location(message, state)
 
 
-async def _after_location(message: Message, state: FSMContext) -> None:
+@router.message(StateFilter(Registration.phone), F.contact)
+async def msg_phone_contact(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    contact = message.contact
+    if contact is None:
+        await message.answer("Please tap the 'Share My Phone Number' button to send your contact.")
+        return
+
+    # Only accept the user's own contact
+    if contact.user_id != message.from_user.id:
+        await message.answer("Please share your own phone number, not someone else's.")
+        return
+
+    phone_raw = contact.phone_number or ""
+    try:
+        phone = validate_phone_number(phone_raw)
+    except ValidationError as exc:
+        await message.answer(f"⚠️ {exc}")
+        return
+
+    # Check for duplicate phone number
+    existing = await session.scalar(
+        sa_select(User).where(User.phone_number == phone)
+    )
+    if existing is not None:
+        await message.answer(
+            "⚠️ This phone number is already registered with another account. "
+            "Each phone number can only be used for one account."
+        )
+        return
+
+    await state.update_data(phone_number=phone)
+    await answer_callback(message)  # type: ignore[arg-type]
+    await _after_phone(message, state)
+
+
+@router.message(StateFilter(Registration.phone), F.text)
+async def msg_phone_text(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if text in {"⏭ Skip", "skip"}:
+        await state.update_data(phone_number=None)
+        await _after_phone(message, state)
+        return
+    await message.answer(
+        "Please tap the '📱 Share My Phone Number' button to share your contact, "
+        "or tap Skip to continue without a phone number.",
+        reply_markup=phone_keyboard(),
+    )
+
+
+async def _after_phone(message: Message, state: FSMContext) -> None:
     await state.set_state(Registration.bio)
     await message.answer(
         "📝 <b>Tell people a little about yourself</b>\n\n"
@@ -233,6 +286,17 @@ async def _after_location(message: Message, state: FSMContext) -> None:
                 [InlineKeyboardButton(text="⏭ Skip bio", callback_data="reg:skip_bio")]
             ]
         ),
+    )
+
+
+async def _after_location(message: Message, state: FSMContext) -> None:
+    await state.set_state(Registration.phone)
+    await message.answer(
+        "📱 <b>Share your phone number</b>\n\n"
+        "Tap the button below to share your phone number via Telegram contact. "
+        "This helps verify your account and keeps the community safe.\n\n"
+        "Your phone number is never shown to other users.",
+        reply_markup=phone_keyboard(),
     )
 
 
@@ -404,6 +468,7 @@ async def cb_confirm(
             latitude=data.get("latitude"),
             longitude=data.get("longitude"),
             consent_at=consent_at,
+            phone_number=data.get("phone_number"),
         )
         user = await UserService.complete_registration(session, user, payload)
     except (KeyError, ValueError, ValidationError, CheersError) as exc:
@@ -520,6 +585,28 @@ async def cb_reg_back(
             callback,
             "📍 Which city are you based in?\n\nPick one below, or choose <b>Other city</b> to type it.",
             reply_markup=city_keyboard(),
+        )
+
+    elif target == "phone":
+        await state.update_data(
+            phone_number=None,
+            bio=None,
+            interests=[],
+            intention=None,
+            photos=[],
+        )
+        await state.set_state(Registration.phone)
+        await safe_edit(
+            callback,
+            "📱 <b>Share your phone number</b>\n\n"
+            "Tap the button below to share your phone number via Telegram contact. "
+            "This helps verify your account and keeps the community safe.\n\n"
+            "Your phone number is never shown to other users.",
+            reply_markup=phone_back_keyboard(),
+        )
+        await callback.message.answer(
+            "Tap the button below to share your contact:",
+            reply_markup=phone_keyboard(),
         )
 
     elif target == "bio":

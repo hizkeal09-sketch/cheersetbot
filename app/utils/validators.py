@@ -79,6 +79,19 @@ def validate_city(value: str) -> str:
     return value
 
 
+def validate_phone_number(value: str) -> str:
+    """Validate and normalize a phone number shared via Telegram contact.
+
+    Accepts international format with optional leading +. Returns digits-only
+    normalized form (e.g. +251911234567 -> 251911234567).
+    """
+    digits = normalize_digits(value)
+    if not 7 <= len(digits) <= 15:
+        raise ValidationError("Please share a valid phone number via the contact button.")
+    # Normalize: keep as digits-only string for storage/comparison
+    return digits
+
+
 def validate_bio(value: str) -> str:
     value = clean_text(value)
     if len(value) < 10:

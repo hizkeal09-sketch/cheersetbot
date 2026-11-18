@@ -69,6 +69,9 @@ class User(TimestampMixin, Base):
     bio: Mapped[str | None] = mapped_column(sa.Text)
     interests: Mapped[list[str]] = mapped_column(sa.JSON, default=list, nullable=False)
     intention: Mapped[Intention | None] = mapped_column(enum_type(Intention))
+    phone_number: Mapped[str | None] = mapped_column(
+        sa.String(32), unique=True, index=True, nullable=True
+    )
 
     is_active: Mapped[bool] = mapped_column(
         sa.Boolean, default=True, server_default=sa.true(), nullable=False
