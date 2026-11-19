@@ -88,45 +88,49 @@ class UserService:
     async def complete_registration(
         session: AsyncSession, user: User, data: RegistrationData
     ) -> User:
-        # Relationships may be unloaded (for example right after get_or_create).
-        # Refresh them explicitly so no lazy IO happens outside the async context.
-        await session.refresh(user, ["photos", "filter"])
+        try:
+            # Relationships may be unloaded (for example right after get_or_create).
+            # Refresh them explicitly so no lazy IO happens outside the async context.
+            await session.refresh(user, ["photos", "filter"])
 
-        # Re-validate in the service so handlers cannot bypass the rules.
-        first_name = validate_first_name(data.first_name)
-        city = validate_city(data.city)
-        interests = validate_interests(data.interests)
-        bio = validate_bio(data.bio) if data.bio else None
-        validate_photo_count(len(data.photos))
-        if data.birth_date > date.today():
-            raise ValidationError("Date of birth cannot be in the future.")
+            # Re-validate in the service so handlers cannot bypass the rules.
+            first_name = validate_first_name(data.first_name)
+            city = validate_city(data.city)
+            interests = validate_interests(data.interests)
+            bio = validate_bio(data.bio) if data.bio else None
+            validate_photo_count(len(data.photos))
+            if data.birth_date > date.today():
+                raise ValidationError("Date of birth cannot be in the future.")
 
-        user.first_name = first_name
-        user.birth_date = data.birth_date
-        user.gender = data.gender
-        user.religion = data.religion
-        user.interested_in = data.interested_in
-        user.city = city
-        user.latitude = data.latitude
-        user.longitude = data.longitude
-        user.bio = bio
-        user.interests = interests
-        user.intention = data.intention
-        user.phone_number = data.phone_number
-        user.consent_at = data.consent_at or user.consent_at or utcnow()
-        user.registration_completed_at = user.registration_completed_at or utcnow()
-        user.is_active = True
-        user.profile_paused = False
+            user.first_name = first_name
+            user.birth_date = data.birth_date
+            user.gender = data.gender
+            user.religion = data.religion
+            user.interested_in = data.interested_in
+            user.city = city
+            user.latitude = data.latitude
+            user.longitude = data.longitude
+            user.bio = bio
+            user.interests = interests
+            user.intention = data.intention
+            user.phone_number = data.phone_number
+            user.consent_at = data.consent_at or user.consent_at or utcnow()
+            user.registration_completed_at = user.registration_completed_at or utcnow()
+            user.is_active = True
+            user.profile_paused = False
 
-        await UserService._set_photos(session, user, data.photos)
+            await UserService._set_photos(session, user, data.photos)
 
-        if user.filter is None:
-            user.filter = UserFilter(min_age=18, max_age=60)
-        user.filter.min_age = 18
-        user.filter.max_age = 60
+            if user.filter is None:
+                user.filter = UserFilter(min_age=18, max_age=60)
+            user.filter.min_age = 18
+            user.filter.max_age = 60
 
-        await session.commit()
-        return user
+            await session.commit()
+            return user
+        except Exception:
+            await session.rollback()
+            raise
 
     @staticmethod
     async def update_profile(session: AsyncSession, user: User, **fields) -> User:
