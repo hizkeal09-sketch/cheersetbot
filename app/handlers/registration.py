@@ -497,8 +497,8 @@ async def cb_confirm(
     user: User,
     bot: Bot,
 ) -> None:
-    data = await state.get_data()
     try:
+        data = await state.get_data()
         birth_date = date.fromisoformat(data["birth_date"])
         if calculate_age(birth_date) < 18:
             raise ValidationError("You must be 18 or older.")
