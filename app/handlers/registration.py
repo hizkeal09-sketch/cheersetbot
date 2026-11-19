@@ -529,13 +529,16 @@ async def cb_confirm(
 
     await state.clear()
     await answer_callback(callback, "Profile created! 🎉")
-    await safe_edit(
-        callback,
-        "🎉 <b>Your Cheers profile is live!</b>\n\n"
-        "Here's your card. Start discovering people whenever you're ready.",
-        main_menu(),
-    )
-    await send_profile_card(bot, callback.from_user.id, user, reply_markup=main_menu())
+    try:
+        await safe_edit(
+            callback,
+            "🎉 <b>Your Cheers profile is live!</b>\n\n"
+            "Here's your card. Start discovering people whenever you're ready.",
+            main_menu(),
+        )
+        await send_profile_card(bot, callback.from_user.id, user, reply_markup=main_menu())
+    except Exception as exc:
+        await answer_callback(callback, f"Profile created but could not show card: {exc}", alert=True)
 
 
 @router.callback_query(F.data == "reg:restart")
