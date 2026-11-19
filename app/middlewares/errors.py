@@ -16,10 +16,16 @@ async def error_handler(event: ErrorEvent) -> None:
     update = event.update
     try:
         if update.callback_query:
-            await update.callback_query.answer(
-                f"⚠️ Error: {str(event.exception)[:200]}", show_alert=True
-            )
+            try:
+                await update.callback_query.answer(
+                    f"⚠️ Error: {str(event.exception)[:200]}", show_alert=True
+                )
+            except Exception:
+                # If callback_query.answer fails (expired callback), try sending a message
+                await update.callback_query.message.answer(
+                    f"⚠️ Error: {str(event.exception)[:200]}"
+                )
         elif update.message:
             await update.message.answer(f"⚠️ Error: {str(event.exception)[:200]}")
-    except (TelegramAPIError, AttributeError):
+    except Exception:
         pass
