@@ -17,9 +17,9 @@ async def error_handler(event: ErrorEvent) -> None:
     try:
         if update.callback_query:
             await update.callback_query.answer(
-                "⚠️ Something went wrong. Please try again.", show_alert=True
+                f"⚠️ Error: {str(event.exception)[:200]}", show_alert=True
             )
         elif update.message:
-            await update.message.answer("⚠️ Something went wrong. Please try again in a moment.")
+            await update.message.answer(f"⚠️ Error: {str(event.exception)[:200]}")
     except (TelegramAPIError, AttributeError):
         pass
