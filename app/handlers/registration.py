@@ -523,7 +523,7 @@ async def cb_confirm(
             phone_number=data.get("phone_number"),
         )
         user = await UserService.complete_registration(session, user, payload)
-    except (KeyError, ValueError, ValidationError, CheersError, TypeError, AttributeError) as exc:
+    except Exception as exc:
         await answer_callback(callback, f"Could not save your profile: {exc}", alert=True)
         return
 
