@@ -136,12 +136,12 @@ async def answer_callback(callback: CallbackQuery, text: str | None = None, aler
         await callback.answer(text or "", show_alert=alert)
     except Exception:
         try:
-            await callback.message.answer(text or "")
-        except Exception:
-            try:
+            if callback.message:
+                await callback.message.answer(text or "")
+            else:
                 await callback.bot.send_message(callback.from_user.id, text or "")
-            except Exception:
-                pass
+        except Exception:
+            pass
 
 
 def deep_get(data: dict[str, Any], key: str, default: Any = None) -> Any:
