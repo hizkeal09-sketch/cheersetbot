@@ -132,8 +132,16 @@ async def safe_edit(
 
 
 async def answer_callback(callback: CallbackQuery, text: str | None = None, alert: bool = False) -> None:
-    with contextlib.suppress(TelegramBadRequest):
+    try:
         await callback.answer(text or "", show_alert=alert)
+    except TelegramBadRequest:
+        # Callback query might be expired or invalid, try sending a message instead
+        try:
+            await callback.message.answer(text or "")
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 def deep_get(data: dict[str, Any], key: str, default: Any = None) -> Any:
