@@ -720,3 +720,11 @@ async def cb_reg_back(
         )
 
     await answer_callback(callback, "Going back…")
+
+
+@router.callback_query(F.data.startswith("reg:"))
+async def cb_reg_unknown(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    """Catch-all for any registration callback that didn't match specific handlers."""
+    await answer_callback(callback, "Session expired. Please tap /start to restart registration.", alert=True)
