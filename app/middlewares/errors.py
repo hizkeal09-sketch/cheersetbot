@@ -22,9 +22,15 @@ async def error_handler(event: ErrorEvent) -> None:
                 )
             except Exception:
                 # If callback_query.answer fails (expired callback), try sending a message
-                await update.callback_query.message.answer(
-                    f"⚠️ Error: {str(event.exception)[:200]}"
-                )
+                if update.callback_query.message:
+                    await update.callback_query.message.answer(
+                        f"⚠️ Error: {str(event.exception)[:200]}"
+                    )
+                else:
+                    await update.callback_query.bot.send_message(
+                        update.callback_query.from_user.id,
+                        f"⚠️ Error: {str(event.exception)[:200]}",
+                    )
         elif update.message:
             await update.message.answer(f"⚠️ Error: {str(event.exception)[:200]}")
     except Exception:

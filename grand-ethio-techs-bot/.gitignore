@@ -1,0 +1,12 @@
+# Grand Ethio Techs - Git Ignore
+.env
+node_modules/
+npm-debug.log
+yarn-error.log
+*.log
+.DS_Thumbs
+Thumbs.db
+vercel.json
+.env.local
+.env.production
+.env.development
